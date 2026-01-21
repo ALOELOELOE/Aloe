@@ -1,40 +1,131 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# zkAuction
+### Private Sealed-Bid Auction Platform on Aleo
 
-## Getting Started
+**Status:** 🚧 Alpha / Active Development  
+**Hackathon:** Aleo x AKINDO Privacy Buildathon 2026
 
-First, run the development server:
+![Aleo](https://img.shields.io/badge/Aleo-Zero%20Knowledge-blue) ![Next.js](https://img.shields.io/badge/Next.js-14-black) ![License](https://img.shields.io/badge/License-MIT-green)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## 📖 Overview
+
+**zkAuction** is a privacy-first sealed-bid auction platform built on the Aleo blockchain. It leverages Zero-Knowledge Proofs (ZKPs) to enable trustless auctions where bid amounts remain cryptographic secrets until a designated reveal phase.
+
+Unlike traditional blockchain auctions where all bids are public (enabling front-running and deeper pockets to game the system), zkAuction uses the "Commit-Reveal" scheme to ensure fairness and privacy.
+
+### The Problem it Solves
+- **Prevents Front-Running:** Competitors cannot see your bid and outbid you by $1.
+- **Stops Strategic Manipulation:** Bidders cannot adjust their strategy based on visible competing bids.
+- **Protects Financial Privacy:** Your bidding capacity and patterns remain private.
+
+---
+
+## ✨ Key Features
+
+| Feature | Description |
+| :--- | :--- |
+| **🔒 Sealed Bids** | Bids are encrypted on-chain using Aleo Records. Even the auctioneer cannot see them until the reveal phase. |
+| **🛡️ Commit-Reveal** | A 2-step process: **Commit** `hash(bid + salt)` → **Reveal** `(bid, salt)` to prove validity. |
+| **💸 Trustless Settlement** | Smart contracts automatically determine the winner and handle fund transfers/refunds. |
+| **⚡ Instant Refunds** | Losing bidders can claim refunds immediately after the auction settles. |
+| **👤 User Privacy** | Built on Aleo, preserving the privacy of the bidder's identity and activity where possible. |
+
+---
+
+## 🏗️ Architecture
+
+zkAuction is a hybrid dApp combining a Leo-based smart contract with a modern Next.js frontend.
+
+```ascii
+ ┌─────────────────────────────────────────────────────────────────┐
+ │                        ZKAUCTION SYSTEM                         │
+ ├─────────────────────────────────────────────────────────────────┤
+ │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐       │
+ │  │   Next.js   │────▶│ Wallet App  │────▶│    Aleo     │       │
+ │  │  Frontend   │     │ (Leo/Puzzle)│     │   Network   │       │
+ │  └─────────────┘     └─────────────┘     └─────────────┘       │
+ │         │                   │                   │               │
+ │         ▼                   ▼                   ▼               │
+ │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐       │
+ │  │    React    │     │   User      │     │  zkAuction  │       │
+ │  │    State    │     │  Key Pair   │     │   Program   │       │
+ │  └─────────────┘     └─────────────┘     └─────────────┘       │
+ └─────────────────────────────────────────────────────────────────┘
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Tech Stack
+- **Smart Contract:** [Leo Language](https://leo-lang.org/)
+- **Frontend:** Next.js 14, React, TailwindCSS, shadcn/ui
+- **State Management:** Zustand
+- **Wallets:** Leo Wallet, Puzzle Wallet
+- **ZK Generation:** @provablehq/sdk
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+---
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+## 🚀 Getting Started
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
+### Prerequisites
+1.  **Aleo Wallet:** Install [Leo Wallet](https://www.leo.app/) or [Puzzle Wallet](https://puzzle.online/).
+2.  **Node.js:** v18 or later.
+3.  **Rust/Cargo:** Required for installing Leo CLI (optional if just running frontend).
 
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Installation
 
-## Learn More
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/zkAuction.git
+    cd zkAuction
+    ```
 
-To learn more about Next.js, take a look at the following resources:
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    # or
+    yarn install
+    ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
+3.  **Run the development server:**
+    ```bash
+    npm run dev
+    ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4.  **Open the app:**
+    Navigate to [http://localhost:3000](http://localhost:3000)
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🔄 User Flow
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+1.  **Connect Wallet:** User connects their Aleo wallet.
+2.  **Create Auction:** Auctioneer sets item details, minimum bid, and durations for commit/reveal phases.
+3.  **Place Bid:**
+    - Bidder enters amount.
+    - App generates a random `salt`.
+    - App submits `Commitment = Hash(amount, salt)`.
+    - **Note:** The `salt` is saved locally. Do not lose it!
+4.  **Reveal Bid:**
+    - After the commit phase ends, the reveal phase starts.
+    - Bidder submits the original `amount` and `salt`.
+    - Contract verifies the hash matches the commitment.
+5.  **Settlement:** Highest verified bid wins. Winner gets the item, seller gets the funds, others get refunds.
+
+---
+
+## 🛣️ Roadmap
+
+- [ ] **Wave 1:** Core Leo program (create, bid) & Basic UI
+- [ ] **Wave 2:** Reveal & Settle logic, localStorage salt management
+- [ ] **Wave 3-4:** Multi-bidder support, Refunds, Edge cases
+- [ ] **Wave 5-6:** Token & NFT Integration
+- [ ] **Wave 7-8:** Advanced auction types (Reverse, Vickrey)
+- [ ] **Wave 9-10:** Mainnet Launch, Audits, Analytics
+
+---
+
+## ⚠️ Disclaimer
+This project is currently in **Alpha**. The smart contracts have not been audited. Use at your own risk.
+
+---
+
+*_Built for the Aleo x AKINDO Privacy Buildathon 2026_*
