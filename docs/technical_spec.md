@@ -1,4 +1,4 @@
-# zkAuction
+# Aloe
 ## Private Sealed-Bid Auction Platform on Aleo
 
 **Technical Specification & Implementation Roadmap**  
@@ -9,9 +9,9 @@
 
 ## Executive Summary
 
-**zkAuction** is a zero-knowledge sealed-bid auction platform built on Aleo that enables trustless, private auctions where bid amounts remain hidden until the reveal phase. This document provides a complete technical specification for building zkAuction over the 10-wave Buildathon cycle.
+**Aloe** is a zero-knowledge sealed-bid auction platform built on Aleo that enables trustless, private auctions where bid amounts remain hidden until the reveal phase. This document provides a complete technical specification for building Aloe over the 10-wave Buildathon cycle.
 
-## Why zkAuction Wins
+## Why Aloe Wins
 
 | Category | Weight | Description |
 | :--- | :--- | :--- |
@@ -34,7 +34,7 @@ Traditional blockchain auctions expose critical information that undermines fair
 *   **Collusion:** Visible bids enable bid-rigging cartels
 
 ### The Solution: ZK Sealed-Bid Auctions
-zkAuction uses Aleo's zero-knowledge architecture to implement cryptographically sealed bids:
+Aloe uses Aleo's zero-knowledge architecture to implement cryptographically sealed bids:
 
 1.  **Commit Phase:** Bidders submit `hash(bid_amount + secret_salt)` — bid amount is hidden
 2.  **Reveal Phase:** Bidders reveal their `bid_amount` and `salt` — contract verifies hash matches
@@ -48,7 +48,7 @@ zkAuction uses Aleo's zero-knowledge architecture to implement cryptographically
 
 ```ascii
  ┌─────────────────────────────────────────────────────────────────┐
- │                        ZKAUCTION SYSTEM                         │
+ │                        ALOE SYSTEM                              │
  ├─────────────────────────────────────────────────────────────────┤
  │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐       │
  │  │   Next.js   │────▶│   Wallet    │────▶│    Aleo     │       │
@@ -57,7 +57,7 @@ zkAuction uses Aleo's zero-knowledge architecture to implement cryptographically
  │         │                   │                   │               │
  │         ▼                   ▼                   ▼               │
  │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐       │
- │  │    React    │     │ Leo Wallet  │     │  zkAuction  │       │
+ │  │    React    │     │ Leo Wallet  │     │     Aloe    │       │
  │  │    State    │     │   Puzzle    │     │   Program   │       │
  │  └─────────────┘     └─────────────┘     └─────────────┘       │
  └─────────────────────────────────────────────────────────────────┘
@@ -554,7 +554,7 @@ Use this checklist for each wave submission:
 
 ## Conclusion
 
-**zkAuction** represents the ideal intersection of Aleo's technical capabilities and real-world demand for private auctions. The commit-reveal pattern is a well-understood cryptographic primitive that translates perfectly to Aleo's Record-based privacy model.
+**Aloe** represents the ideal intersection of Aleo's technical capabilities and real-world demand for private auctions. The commit-reveal pattern is a well-understood cryptographic primitive that translates perfectly to Aleo's Record-based privacy model.
 
 With 35 hours/week over 10 waves, you have ample time to build a production-ready platform that could become critical infrastructure for the Aleo ecosystem—powering NFT marketplaces, domain auctions, and decentralized procurement.
 

@@ -1,4 +1,4 @@
-# zkAuction
+# Aloe
 ### Private Sealed-Bid Auction Platform on Aleo
 
 **Status:** 🚧 Alpha / Active Development  
@@ -10,9 +10,9 @@
 
 ## 📖 Overview
 
-**zkAuction** is a privacy-first sealed-bid auction platform built on the Aleo blockchain. It leverages Zero-Knowledge Proofs (ZKPs) to enable trustless auctions where bid amounts remain cryptographic secrets until a designated reveal phase.
+**Aloe** is a privacy-first sealed-bid auction platform built on the Aleo blockchain. It leverages Zero-Knowledge Proofs (ZKPs) to enable trustless auctions where bid amounts remain cryptographic secrets until a designated reveal phase.
 
-Unlike traditional blockchain auctions where all bids are public (enabling front-running and deeper pockets to game the system), zkAuction uses the "Commit-Reveal" scheme to ensure fairness and privacy.
+Unlike traditional blockchain auctions where all bids are public (enabling front-running and deeper pockets to game the system), Aloe uses the "Commit-Reveal" scheme to ensure fairness and privacy.
 
 ### The Problem it Solves
 - **Prevents Front-Running:** Competitors cannot see your bid and outbid you by $1.
@@ -35,11 +35,11 @@ Unlike traditional blockchain auctions where all bids are public (enabling front
 
 ## 🏗️ Architecture
 
-zkAuction is a hybrid dApp combining a Leo-based smart contract with a modern Next.js frontend.
+Aloe is a hybrid dApp combining a Leo-based smart contract with a modern Next.js frontend.
 
 ```ascii
  ┌─────────────────────────────────────────────────────────────────┐
- │                        ZKAUCTION SYSTEM                         │
+ │                        ALOE SYSTEM                              │
  ├─────────────────────────────────────────────────────────────────┤
  │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐       │
  │  │   Next.js   │────▶│ Wallet App  │────▶│    Aleo     │       │
@@ -48,7 +48,7 @@ zkAuction is a hybrid dApp combining a Leo-based smart contract with a modern Ne
  │         │                   │                   │               │
  │         ▼                   ▼                   ▼               │
  │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐       │
- │  │    React    │     │   User      │     │  zkAuction  │       │
+ │  │    React    │     │   User      │     │     Aloe    │       │
  │  │    State    │     │  Key Pair   │     │   Program   │       │
  │  └─────────────┘     └─────────────┘     └─────────────┘       │
  └─────────────────────────────────────────────────────────────────┘
@@ -74,8 +74,8 @@ zkAuction is a hybrid dApp combining a Leo-based smart contract with a modern Ne
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/zkAuction.git
-    cd zkAuction
+    git clone https://github.com/your-username/aloe.git
+    cd aloe
     ```
 
 2.  **Install dependencies:**
