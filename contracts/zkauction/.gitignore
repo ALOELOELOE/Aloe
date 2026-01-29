@@ -1,0 +1,9 @@
+# Environment file with private key
+.env
+
+# Build artifacts
+build/
+outputs/
+
+# Leo cache
+.leo/
