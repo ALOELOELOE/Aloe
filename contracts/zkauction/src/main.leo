@@ -4,6 +4,15 @@
 program zkauction.aleo {
 
     // ============================================
+    // CONSTRUCTOR (required for deployment)
+    // ============================================
+
+    // Simple constructor for initial deployment
+    // Using @noupgrade to make this a non-upgradable program
+    @noupgrade
+    async constructor() {}
+
+    // ============================================
     // DATA STRUCTURES
     // ============================================
 
