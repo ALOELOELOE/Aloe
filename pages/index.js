@@ -28,7 +28,7 @@ export default function Home() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <Shield className="h-6 w-6 text-primary" />
+            <Shield className="h-6 w-6 text-emerald-500" />
             <span className="text-xl font-bold">Aloe</span>
           </Link>
 
@@ -64,7 +64,7 @@ export default function Home() {
           <h2 className="mb-6 text-2xl font-semibold">How It Works</h2>
           <div className="grid gap-6 sm:grid-cols-3">
             <div className="rounded-lg border border-border p-6">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
                 1
               </div>
               <h3 className="mb-2 font-semibold">Create Auction</h3>
@@ -74,7 +74,7 @@ export default function Home() {
               </p>
             </div>
             <div className="rounded-lg border border-border p-6">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
                 2
               </div>
               <h3 className="mb-2 font-semibold">Place Sealed Bids</h3>
@@ -84,7 +84,7 @@ export default function Home() {
               </p>
             </div>
             <div className="rounded-lg border border-border p-6">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
                 3
               </div>
               <h3 className="mb-2 font-semibold">Reveal & Winner</h3>

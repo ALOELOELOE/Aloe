@@ -39,7 +39,7 @@ export default function CreateAuction() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <Shield className="h-6 w-6 text-primary" />
+            <Shield className="h-6 w-6 text-emerald-500" />
             <span className="text-xl font-bold">Aloe</span>
           </Link>
 
@@ -84,7 +84,7 @@ export default function CreateAuction() {
               <h3 className="mb-4 font-semibold">How Sealed Bids Work</h3>
               <div className="space-y-4 text-sm text-muted-foreground">
                 <div className="flex gap-3">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400">
                     1
                   </div>
                   <div>
@@ -96,7 +96,7 @@ export default function CreateAuction() {
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400">
                     2
                   </div>
                   <div>
@@ -108,7 +108,7 @@ export default function CreateAuction() {
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400">
                     3
                   </div>
                   <div>

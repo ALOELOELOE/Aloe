@@ -24,6 +24,7 @@ import {
 } from "@/lib/aleo";
 import {
   PROGRAM_ID,
+  NETWORK,
   DEFAULT_COMMIT_DURATION,
   DEFAULT_REVEAL_DURATION,
   AUCTION_STATUS,
@@ -106,9 +107,10 @@ export function CreateAuctionForm({ onSuccess }) {
       toast.info("Please approve the transaction in your wallet...");
 
       // Request transaction from wallet
+      // AleoTransaction interface requires: address, chainId, transitions, fee, feePrivate
       const txId = await requestTransaction({
         address: publicKey,
-        chain: "aleo",
+        chainId: NETWORK,
         transitions: [
           {
             program: txInputs.programId,
