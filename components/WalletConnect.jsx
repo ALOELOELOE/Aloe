@@ -16,17 +16,28 @@ export function WalletConnect() {
   const { publicKey, wallet, connecting, connected, disconnect } = useWallet();
   const { setVisible } = useWalletModal();
 
+  // Log wallet state changes
+  console.log("[Aloe:Wallet] State:", {
+    connected,
+    connecting,
+    publicKey: publicKey ? `${publicKey.slice(0, 12)}...` : null,
+    wallet: wallet?.adapter?.name || null,
+  });
+
   // Handle connect button click
   const handleConnect = () => {
+    console.log("[Aloe:Wallet] Opening wallet modal...");
     setVisible(true);
   };
 
   // Handle disconnect button click
   const handleDisconnect = async () => {
+    console.log("[Aloe:Wallet] Disconnecting...");
     try {
       await disconnect();
+      console.log("[Aloe:Wallet] Disconnected successfully");
     } catch (error) {
-      console.error("Failed to disconnect:", error);
+      console.error("[Aloe:Wallet] Failed to disconnect:", error);
     }
   };
 

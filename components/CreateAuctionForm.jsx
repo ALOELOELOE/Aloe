@@ -87,13 +87,27 @@ export function CreateAuctionForm({ onSuccess }) {
     setCreating(true);
     setError(null);
 
+    console.log("[Aloe] ====== CREATE AUCTION START ======");
+    console.log("[Aloe] Form values:", {
+      itemName: itemName.trim(),
+      minBid: minBid,
+      commitDuration: commitBlocks,
+      revealDuration: revealBlocks,
+    });
+    console.log("[Aloe] Wallet address:", publicKey);
+
     try {
       // Generate unique auction and item IDs
       const auctionId = generateAuctionId();
       const itemId = generateAuctionId(); // Could also hash the item name
 
+      console.log("[Aloe] Generated IDs:");
+      console.log("[Aloe]   Auction ID:", auctionId);
+      console.log("[Aloe]   Item ID:", itemId);
+
       // Convert credits to microcredits
       const minBidMicro = parseCreditsToMicro(minBid);
+      console.log("[Aloe] Min bid converted:", minBid, "credits ->", minBidMicro, "microcredits");
 
       // Build transaction inputs
       const txInputs = buildCreateAuctionInputs({
@@ -104,11 +118,17 @@ export function CreateAuctionForm({ onSuccess }) {
         revealDuration: revealBlocks,
       });
 
-      toast.info("Please approve the transaction in your wallet...");
+      console.log("[Aloe] Transaction inputs built:");
+      console.log("[Aloe]   Program ID:", txInputs.programId);
+      console.log("[Aloe]   Function:", txInputs.functionName);
+      console.log("[Aloe]   Inputs:", JSON.stringify(txInputs.inputs, null, 2));
+      console.log("[Aloe]   Fee:", txInputs.fee, "microcredits");
 
-      // Request transaction from wallet
-      // AleoTransaction interface requires: address, chainId, transitions, fee, feePrivate
-      const txId = await requestTransaction({
+      toast.info("Please approve the transaction in your wallet...");
+      console.log("[Aloe] Requesting wallet approval...");
+
+      // Build the full transaction request
+      const txRequest = {
         address: publicKey,
         chainId: NETWORK,
         transitions: [
@@ -120,11 +140,20 @@ export function CreateAuctionForm({ onSuccess }) {
         ],
         fee: txInputs.fee,
         feePrivate: false,
-      });
+      };
+
+      console.log("[Aloe] Transaction request:", JSON.stringify(txRequest, null, 2));
+
+      // Request transaction from wallet
+      // AleoTransaction interface requires: address, chainId, transitions, fee, feePrivate
+      const txId = await requestTransaction(txRequest);
+
+      console.log("[Aloe] ✅ Transaction submitted successfully!");
+      console.log("[Aloe] Transaction ID:", txId);
 
       // Add auction to local store for display
       // In production, this would be fetched from chain
-      addAuction({
+      const newAuction = {
         id: auctionId,
         itemId: itemId,
         itemName: itemName.trim(),
@@ -135,11 +164,16 @@ export function CreateAuctionForm({ onSuccess }) {
         status: AUCTION_STATUS.COMMIT_PHASE,
         bidCount: 0,
         txId: txId,
-      });
+      };
+
+      addAuction(newAuction);
+      console.log("[Aloe] Auction added to local store:", newAuction);
 
       toast.success("Auction created successfully!", {
         description: `Transaction ID: ${txId?.slice(0, 16)}...`,
       });
+
+      console.log("[Aloe] ====== CREATE AUCTION COMPLETE ======");
 
       // Reset form
       setItemName("");
@@ -152,13 +186,20 @@ export function CreateAuctionForm({ onSuccess }) {
         onSuccess(auctionId);
       }
     } catch (error) {
-      console.error("Failed to create auction:", error);
+      console.error("[Aloe] ❌ Failed to create auction:", error);
+      console.error("[Aloe] Error details:", {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+      });
       setError(error.message);
       toast.error("Failed to create auction", {
         description: error.message,
       });
     } finally {
       setCreating(false);
+      console.log("[Aloe] Create auction flow ended");
     }
   };
 
