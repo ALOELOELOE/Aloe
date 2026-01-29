@@ -1,12 +1,33 @@
 // Aloe - Home Page
 // Displays auction list and navigation
 
+import { useState } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
 import { WalletConnect } from "@/components/WalletConnect";
 import { AuctionList } from "@/components/AuctionList";
 import { Button } from "@/components/ui/button";
-import { Plus, Shield } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Plus, Shield, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  buildPlaceBidInputs,
+  storeBidLocally,
+  formatCredits,
+  parseCreditsToMicro,
+} from "@/lib/aleo";
+import { PROGRAM_ID, NETWORK, AUCTION_STATUS } from "@/lib/constants";
+import { useAuctionStore } from "@/store/auctionStore";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,6 +40,138 @@ const geistMono = Geist_Mono({
 });
 
 export default function Home() {
+  const { publicKey, requestTransaction } = useWallet();
+  const { updateAuction } = useAuctionStore();
+
+  // Dialog state for bidding
+  const [bidDialogOpen, setBidDialogOpen] = useState(false);
+  const [selectedAuction, setSelectedAuction] = useState(null);
+  const [bidAmount, setBidAmount] = useState("");
+  const [isPlacingBid, setIsPlacingBid] = useState(false);
+
+  // Handle auction selection (view details)
+  const handleSelectAuction = (auction) => {
+    console.log("[Aloe] Auction selected:", {
+      id: auction.id,
+      itemName: auction.itemName,
+      status: auction.status,
+      minBid: auction.minBid,
+    });
+    setSelectedAuction(auction);
+    setBidDialogOpen(true);
+  };
+
+  // Handle bid button click
+  const handleBidClick = (auction) => {
+    console.log("[Aloe] Bid initiated for auction:", auction.id);
+    setSelectedAuction(auction);
+    setBidDialogOpen(true);
+  };
+
+  // Handle bid submission
+  const handlePlaceBid = async () => {
+    if (!publicKey) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    if (!selectedAuction) {
+      toast.error("No auction selected");
+      return;
+    }
+
+    const bidValue = parseFloat(bidAmount);
+    const minBidCredits = selectedAuction.minBid / 1_000_000;
+
+    if (isNaN(bidValue) || bidValue < minBidCredits) {
+      toast.error(`Bid must be at least ${minBidCredits} credits`);
+      return;
+    }
+
+    setIsPlacingBid(true);
+
+    try {
+      const bidMicro = parseCreditsToMicro(bidAmount);
+
+      console.log("[Aloe] ====== PLACE BID START ======");
+      console.log("[Aloe] Auction ID:", selectedAuction.id);
+      console.log("[Aloe] Bid Amount:", bidAmount, "credits (", bidMicro, "microcredits)");
+      console.log("[Aloe] Wallet Address:", publicKey);
+
+      // Build transaction inputs
+      const txInputs = buildPlaceBidInputs({
+        auctionId: selectedAuction.id,
+        bidAmount: bidMicro,
+        deposit: bidMicro, // deposit equals bid for simplicity
+      });
+
+      console.log("[Aloe] Transaction inputs built:");
+      console.log("[Aloe]   Program:", txInputs.programId);
+      console.log("[Aloe]   Function:", txInputs.functionName);
+      console.log("[Aloe]   Inputs:", txInputs.inputs);
+      console.log("[Aloe]   Fee:", txInputs.fee, "microcredits");
+      console.log("[Aloe]   Salt generated:", txInputs.metadata.salt);
+
+      toast.info("Please approve the transaction in your wallet...");
+
+      console.log("[Aloe] Requesting transaction from wallet...");
+
+      // Request transaction from wallet
+      const txId = await requestTransaction({
+        address: publicKey,
+        chainId: NETWORK,
+        transitions: [
+          {
+            program: txInputs.programId,
+            functionName: txInputs.functionName,
+            inputs: txInputs.inputs,
+          },
+        ],
+        fee: txInputs.fee,
+        feePrivate: false,
+      });
+
+      console.log("[Aloe] ✅ Transaction submitted!");
+      console.log("[Aloe] Transaction ID:", txId);
+
+      // Store bid locally for later reveal
+      storeBidLocally(
+        selectedAuction.id,
+        bidMicro.toString(),
+        txInputs.metadata.salt
+      );
+      console.log("[Aloe] Bid stored locally for reveal phase");
+
+      // Update auction bid count in store
+      updateAuction(selectedAuction.id, {
+        bidCount: (selectedAuction.bidCount || 0) + 1,
+      });
+
+      toast.success("Bid placed successfully!", {
+        description: `Transaction ID: ${txId?.slice(0, 16)}...`,
+      });
+
+      console.log("[Aloe] ====== PLACE BID COMPLETE ======");
+
+      // Close dialog and reset
+      setBidDialogOpen(false);
+      setBidAmount("");
+      setSelectedAuction(null);
+    } catch (error) {
+      console.error("[Aloe] ❌ Failed to place bid:", error);
+      console.error("[Aloe] Error details:", {
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+      });
+      toast.error("Failed to place bid", {
+        description: error.message,
+      });
+    } finally {
+      setIsPlacingBid(false);
+    }
+  };
+
   return (
     <div
       className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background font-sans`}
@@ -108,9 +261,101 @@ export default function Home() {
             </Link>
           </div>
 
-          <AuctionList />
+          <AuctionList
+            onSelect={handleSelectAuction}
+            onBid={handleBidClick}
+          />
         </section>
       </main>
+
+      {/* Bid Dialog */}
+      <Dialog open={bidDialogOpen} onOpenChange={setBidDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedAuction?.status === AUCTION_STATUS.COMMIT_PHASE
+                ? "Place Sealed Bid"
+                : "Auction Details"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAuction?.itemName}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedAuction && (
+            <div className="space-y-4">
+              {/* Auction Info */}
+              <div className="rounded-lg border border-border p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Minimum Bid:</span>
+                  <span className="font-medium">
+                    {formatCredits(selectedAuction.minBid)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Current Bids:</span>
+                  <span className="font-medium">
+                    {selectedAuction.bidCount || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Auction ID:</span>
+                  <span className="font-mono text-xs">
+                    {selectedAuction.id?.slice(0, 12)}...
+                  </span>
+                </div>
+              </div>
+
+              {/* Bid Input (only in commit phase) */}
+              {selectedAuction.status === AUCTION_STATUS.COMMIT_PHASE && (
+                <div className="space-y-2">
+                  <Label htmlFor="bidAmount">Your Bid (credits)</Label>
+                  <Input
+                    id="bidAmount"
+                    type="number"
+                    step="0.000001"
+                    min={selectedAuction.minBid / 1_000_000}
+                    placeholder={`Min: ${selectedAuction.minBid / 1_000_000}`}
+                    value={bidAmount}
+                    onChange={(e) => setBidAmount(e.target.value)}
+                    disabled={isPlacingBid}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Your bid is encrypted and hidden until the reveal phase.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setBidDialogOpen(false)}
+              disabled={isPlacingBid}
+            >
+              Cancel
+            </Button>
+            {selectedAuction?.status === AUCTION_STATUS.COMMIT_PHASE && (
+              <Button
+                onClick={handlePlaceBid}
+                disabled={isPlacingBid || !publicKey || !bidAmount}
+              >
+                {isPlacingBid ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Placing Bid...
+                  </>
+                ) : !publicKey ? (
+                  "Connect Wallet"
+                ) : (
+                  "Place Sealed Bid"
+                )}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Footer */}
       <footer className="border-t border-border py-8">
