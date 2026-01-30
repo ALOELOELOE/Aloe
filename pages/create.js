@@ -5,6 +5,7 @@ import { useRouter } from "next/router";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import Image from "next/image";
+import { motion } from "framer-motion";
 import { WalletConnect } from "@/components/WalletConnect";
 import { CreateAuctionForm } from "@/components/CreateAuctionForm";
 import { Button } from "@/components/ui/button";
@@ -52,36 +53,56 @@ export default function CreateAuction() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-12 md:py-16">
         {/* Back Link */}
-        <div className="mb-8">
+        <motion.div
+          className="mb-8"
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3 }}
+        >
           <Link href="/">
             <Button variant="ghost" className="gap-2">
               <ArrowLeft className="h-4 w-4" />
               Back to Auctions
             </Button>
           </Link>
-        </div>
+        </motion.div>
 
         {/* Page Title */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Create New Auction</h1>
+        <motion.div
+          className="mb-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <h1 className="text-3xl md:text-4xl font-bold">Create New Auction</h1>
           <p className="mt-2 text-muted-foreground">
             Set up a sealed-bid auction with cryptographic privacy on Aleo.
           </p>
-        </div>
+        </motion.div>
 
         {/* Form and Info Grid */}
         <div className="grid gap-8 lg:grid-cols-2">
           {/* Form */}
-          <div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+          >
             <CreateAuctionForm onSuccess={handleSuccess} />
-          </div>
+          </motion.div>
 
           {/* Info Sidebar */}
           <div className="space-y-6">
             {/* How Commit-Reveal Works */}
-            <div className="rounded-lg border border-border p-6">
+            <motion.div
+              className="rounded-lg border border-border p-6 hover:border-emerald-500/50 transition-colors"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
+              whileHover={{ scale: 1.01 }}
+            >
               <h3 className="mb-4 font-semibold">How Sealed Bids Work</h3>
               <div className="space-y-4 text-sm text-muted-foreground">
                 <div className="flex gap-3">
@@ -121,10 +142,16 @@ export default function CreateAuction() {
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
             {/* Tips */}
-            <div className="rounded-lg border border-border p-6">
+            <motion.div
+              className="rounded-lg border border-border p-6 hover:border-emerald-500/50 transition-colors"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.4 }}
+              whileHover={{ scale: 1.01 }}
+            >
               <h3 className="mb-4 font-semibold">Tips for Auctioneers</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-start gap-2">
@@ -155,7 +182,7 @@ export default function CreateAuction() {
                   </span>
                 </li>
               </ul>
-            </div>
+            </motion.div>
           </div>
         </div>
       </main>

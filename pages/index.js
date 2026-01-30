@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import Image from "next/image";
+import { motion } from "framer-motion";
 import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
 import { WalletConnect } from "@/components/WalletConnect";
 import { AuctionList } from "@/components/AuctionList";
@@ -204,60 +205,78 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-12 md:py-16 lg:py-20">
         {/* Hero Section */}
-        <section className="mb-12 text-center">
-          <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl">
+        <motion.section
+          className="mb-16 md:mb-20 text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <h1 className="mb-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
             Private Sealed-Bid Auctions
           </h1>
-          <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
+          <p className="mx-auto max-w-2xl text-lg md:text-xl text-muted-foreground leading-relaxed">
             Aloe enables trustless auctions with cryptographic privacy. Bids are
             sealed using zero-knowledge proofs on the Aleo blockchain - no one
             knows your bid until reveal time.
           </p>
-        </section>
+        </motion.section>
 
         {/* How it Works */}
-        <section className="mb-12">
-          <h2 className="mb-6 text-2xl font-semibold">How It Works</h2>
-          <div className="grid gap-6 sm:grid-cols-3">
-            <div className="rounded-lg border border-border p-6">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
-                1
-              </div>
-              <h3 className="mb-2 font-semibold">Create Auction</h3>
-              <p className="text-sm text-muted-foreground">
-                Set your item, minimum bid, and timing for commit and reveal
-                phases.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border p-6">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
-                2
-              </div>
-              <h3 className="mb-2 font-semibold">Place Sealed Bids</h3>
-              <p className="text-sm text-muted-foreground">
-                Bidders submit encrypted commitments. Nobody can see bid
-                amounts.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border p-6">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
-                3
-              </div>
-              <h3 className="mb-2 font-semibold">Reveal & Winner</h3>
-              <p className="text-sm text-muted-foreground">
-                Bidders reveal their bids. Highest bid wins. ZK proofs ensure
-                fairness.
-              </p>
-            </div>
+        <motion.section
+          className="mb-16 md:mb-20"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+        >
+          <h2 className="mb-8 text-2xl md:text-3xl font-bold">How It Works</h2>
+          <div className="grid gap-6 md:gap-8 sm:grid-cols-3">
+            {[
+              {
+                step: 1,
+                title: "Create Auction",
+                description: "Set your item, minimum bid, and timing for commit and reveal phases.",
+              },
+              {
+                step: 2,
+                title: "Place Sealed Bids",
+                description: "Bidders submit encrypted commitments. Nobody can see bid amounts.",
+              },
+              {
+                step: 3,
+                title: "Reveal & Winner",
+                description: "Bidders reveal their bids. Highest bid wins. ZK proofs ensure fairness.",
+              },
+            ].map((item, index) => (
+              <motion.div
+                key={item.step}
+                className="rounded-lg border border-border p-6 md:p-8 hover:border-emerald-500/50 transition-colors"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.3 + index * 0.1 }}
+                whileHover={{ scale: 1.02 }}
+              >
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-lg ring-2 ring-emerald-500/30">
+                  {item.step}
+                </div>
+                <h3 className="mb-3 text-lg font-semibold">{item.title}</h3>
+                <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
+                  {item.description}
+                </p>
+              </motion.div>
+            ))}
           </div>
-        </section>
+        </motion.section>
 
         {/* Auctions Section */}
-        <section>
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-2xl font-semibold">Active Auctions</h2>
+        <motion.section
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+        >
+          <div className="mb-8 flex items-center justify-between">
+            <h2 className="text-2xl md:text-3xl font-bold">Active Auctions</h2>
             <Link href="/create">
               <Button className="gap-2">
                 <Plus className="h-4 w-4" />
@@ -270,7 +289,7 @@ export default function Home() {
             onSelect={handleSelectAuction}
             onBid={handleBidClick}
           />
-        </section>
+        </motion.section>
       </main>
 
       {/* Bid Dialog */}
@@ -288,9 +307,9 @@ export default function Home() {
           </DialogHeader>
 
           {selectedAuction && (
-            <div className="space-y-4">
+            <div className="space-y-6 py-2">
               {/* Auction Info */}
-              <div className="rounded-lg border border-border p-4 space-y-2 text-sm">
+              <div className="rounded-lg border border-border p-4 space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Minimum Bid:</span>
                   <span className="font-medium">
@@ -333,7 +352,7 @@ export default function Home() {
             </div>
           )}
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-3 pt-2">
             <Button
               variant="outline"
               onClick={() => setBidDialogOpen(false)}

@@ -54,12 +54,13 @@ export function AuctionList({ onSelect, onBid, filter = null }) {
   // Render auction grid
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {sortedAuctions.map((auction) => (
+      {sortedAuctions.map((auction, index) => (
         <AuctionCard
           key={auction.id}
           auction={auction}
           onSelect={onSelect}
           onBid={onBid}
+          index={index}
         />
       ))}
     </div>
