@@ -48,23 +48,26 @@ export default function Home() {
   const [selectedAuction, setSelectedAuction] = useState(null);
   const [bidAmount, setBidAmount] = useState("");
   const [isPlacingBid, setIsPlacingBid] = useState(false);
+  const [isBidMode, setIsBidMode] = useState(false); // true = Place Bid, false = View Details
 
-  // Handle auction selection (view details)
+  // Handle auction selection (view details only)
   const handleSelectAuction = (auction) => {
-    console.log("[Aloe] Auction selected:", {
+    console.log("[Aloe] Auction selected (view details):", {
       id: auction.id,
       itemName: auction.itemName,
       status: auction.status,
       minBid: auction.minBid,
     });
     setSelectedAuction(auction);
+    setIsBidMode(false); // View-only mode
     setBidDialogOpen(true);
   };
 
-  // Handle bid button click
+  // Handle bid button click (opens dialog in bid mode)
   const handleBidClick = (auction) => {
     console.log("[Aloe] Bid initiated for auction:", auction.id);
     setSelectedAuction(auction);
+    setIsBidMode(true); // Bid mode
     setBidDialogOpen(true);
   };
 
@@ -157,6 +160,7 @@ export default function Home() {
       setBidDialogOpen(false);
       setBidAmount("");
       setSelectedAuction(null);
+      setIsBidMode(false);
     } catch (error) {
       console.error("[Aloe] ❌ Failed to place bid:", error);
       console.error("[Aloe] Error details:", {
@@ -273,7 +277,7 @@ export default function Home() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {selectedAuction?.status === AUCTION_STATUS.COMMIT_PHASE
+              {isBidMode && selectedAuction?.status === AUCTION_STATUS.COMMIT_PHASE
                 ? "Place Sealed Bid"
                 : "Auction Details"}
             </DialogTitle>
@@ -306,8 +310,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Bid Input (only in commit phase) */}
-              {selectedAuction.status === AUCTION_STATUS.COMMIT_PHASE && (
+              {/* Bid Input (only in bid mode during commit phase) */}
+              {isBidMode && selectedAuction.status === AUCTION_STATUS.COMMIT_PHASE && (
                 <div className="space-y-2">
                   <Label htmlFor="bidAmount">Your Bid (credits)</Label>
                   <Input
@@ -336,7 +340,7 @@ export default function Home() {
             >
               Cancel
             </Button>
-            {selectedAuction?.status === AUCTION_STATUS.COMMIT_PHASE && (
+            {isBidMode && selectedAuction?.status === AUCTION_STATUS.COMMIT_PHASE && (
               <Button
                 onClick={handlePlaceBid}
                 disabled={isPlacingBid || !publicKey || !bidAmount}
