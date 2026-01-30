@@ -26,9 +26,9 @@ export default function CreateAuction() {
 
   // Handle successful auction creation
   const handleSuccess = (auctionId) => {
-    // Redirect to home after short delay
+    // Redirect to dashboard after short delay
     setTimeout(() => {
-      router.push("/");
+      router.push("/dashboard");
     }, 2000);
   };
 
@@ -61,10 +61,10 @@ export default function CreateAuction() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <Link href="/">
+          <Link href="/dashboard">
             <Button variant="ghost" className="gap-2">
               <ArrowLeft className="h-4 w-4" />
-              Back to Auctions
+              Back to Dashboard
             </Button>
           </Link>
         </motion.div>
