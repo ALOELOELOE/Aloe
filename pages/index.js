@@ -106,20 +106,11 @@ export default function Home() {
             >
               <Link href="/dashboard">
                 <Button
-                  variant="outline"
                   size="lg"
-                  className="gap-2 border-emerald-500 bg-transparent px-6 text-emerald-400 hover:bg-emerald-500/10"
-                >
-                  Get Started
-                </Button>
-              </Link>
-              <Link href="/dashboard">
-                <Button
-                  size="lg"
-                  className="gap-2 bg-emerald-500 px-6 text-black hover:bg-emerald-400"
+                  className="gap-2 bg-emerald-500 px-8 py-6 text-base text-black hover:bg-emerald-400"
                 >
                   Launch App
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-5 w-5" />
                 </Button>
               </Link>
             </motion.div>

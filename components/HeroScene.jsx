@@ -74,19 +74,16 @@ function MainCrystal({ position = [0, 0, 0], scale = 1 }) {
   );
 }
 
-// Small crystal that orbits along a ring path
-function RingCrystal({ radius, angle, color = "#6ee7b7", scale = 0.35, orbitSpeed = 0.3 }) {
+// Small crystal that orbits along a ring path using shared angle
+function RingCrystal({ radius, angleRef, offset = 0, color = "#6ee7b7", scale = 0.35 }) {
   const meshRef = useRef();
-  const angleRef = useRef(angle);
 
   useFrame(() => {
-    // Update the orbit angle
-    angleRef.current += orbitSpeed * 0.01;
-
-    if (meshRef.current) {
-      // Update position along the ring
-      meshRef.current.position.x = Math.cos(angleRef.current) * radius;
-      meshRef.current.position.z = Math.sin(angleRef.current) * radius;
+    if (meshRef.current && angleRef.current !== undefined) {
+      // Use shared angle + offset for position
+      const currentAngle = angleRef.current + offset;
+      meshRef.current.position.x = Math.cos(currentAngle) * radius;
+      meshRef.current.position.z = Math.sin(currentAngle) * radius;
 
       // Self-rotation
       meshRef.current.rotation.x += 0.01;
@@ -95,7 +92,7 @@ function RingCrystal({ radius, angle, color = "#6ee7b7", scale = 0.35, orbitSpee
   });
 
   return (
-    <mesh ref={meshRef} position={[Math.cos(angle) * radius, 0, Math.sin(angle) * radius]} scale={scale}>
+    <mesh ref={meshRef} position={[Math.cos(offset) * radius, 0, Math.sin(offset) * radius]} scale={scale}>
       <octahedronGeometry args={[1, 0]} />
       <MeshTransmissionMaterial
         backside
@@ -119,24 +116,21 @@ function RingCrystal({ radius, angle, color = "#6ee7b7", scale = 0.35, orbitSpee
   );
 }
 
-// Glass sphere that orbits along a ring path
-function RingSphere({ radius, angle, color = "#67e8f9", scale = 0.3, orbitSpeed = 0.3 }) {
+// Glass sphere that orbits along a ring path using shared angle
+function RingSphere({ radius, angleRef, offset = 0, color = "#67e8f9", scale = 0.3 }) {
   const meshRef = useRef();
-  const angleRef = useRef(angle);
 
   useFrame(() => {
-    // Update the orbit angle
-    angleRef.current += orbitSpeed * 0.01;
-
-    if (meshRef.current) {
-      // Update position along the ring
-      meshRef.current.position.x = Math.cos(angleRef.current) * radius;
-      meshRef.current.position.z = Math.sin(angleRef.current) * radius;
+    if (meshRef.current && angleRef.current !== undefined) {
+      // Use shared angle + offset for position
+      const currentAngle = angleRef.current + offset;
+      meshRef.current.position.x = Math.cos(currentAngle) * radius;
+      meshRef.current.position.z = Math.sin(currentAngle) * radius;
     }
   });
 
   return (
-    <mesh ref={meshRef} position={[Math.cos(angle) * radius, 0, Math.sin(angle) * radius]} scale={scale}>
+    <mesh ref={meshRef} position={[Math.cos(offset) * radius, 0, Math.sin(offset) * radius]} scale={scale}>
       <sphereGeometry args={[1, 32, 32]} />
       <MeshTransmissionMaterial
         backside
@@ -262,11 +256,25 @@ const RING_2 = {
   speed: 0.3,
 };
 
+// Shared orbit angle controller
+function OrbitController({ angleRef, speed = 0.4 }) {
+  useFrame(() => {
+    angleRef.current += speed * 0.01;
+  });
+  return null;
+}
+
 // Main scene
 function Scene({ onLoaded }) {
+  // Shared angle ref for synchronized orbits
+  const sharedAngleRef = useRef(0);
+
   return (
     <>
       <LoadingTracker onLoaded={onLoaded} />
+
+      {/* Shared orbit controller - updates the angle for all elements */}
+      <OrbitController angleRef={sharedAngleRef} speed={0.4} />
 
       {/* Lighting */}
       <ambientLight intensity={0.3} />
@@ -282,14 +290,16 @@ function Scene({ onLoaded }) {
 
       {/* Ring 1 (green) with orbiting elements - centered on emerald */}
       <OrbitalRing {...RING_1} center={CENTER}>
-        <RingCrystal radius={RING_1.radius} angle={0} color="#10b981" scale={0.35} orbitSpeed={0.4} />
-        <RingSphere radius={RING_1.radius} angle={Math.PI} color="#a5f3fc" scale={0.28} orbitSpeed={0.4} />
+        {/* Elements at angle 0 and PI (opposite each other on ring 1) */}
+        <RingCrystal radius={RING_1.radius} angleRef={sharedAngleRef} offset={0} color="#10b981" scale={0.35} />
+        <RingSphere radius={RING_1.radius} angleRef={sharedAngleRef} offset={Math.PI} color="#a5f3fc" scale={0.28} />
       </OrbitalRing>
 
       {/* Ring 2 (mint) with orbiting elements - centered on emerald */}
+      {/* Elements offset by PI from ring 1 elements (opposite ring position) */}
       <OrbitalRing {...RING_2} center={CENTER}>
-        <RingCrystal radius={RING_2.radius} angle={Math.PI / 2} color="#6ee7b7" scale={0.4} orbitSpeed={0.35} />
-        <RingCrystal radius={RING_2.radius} angle={Math.PI * 1.5} color="#06b6d4" scale={0.3} orbitSpeed={0.35} />
+        <RingCrystal radius={RING_2.radius} angleRef={sharedAngleRef} offset={Math.PI} color="#6ee7b7" scale={0.4} />
+        <RingCrystal radius={RING_2.radius} angleRef={sharedAngleRef} offset={0} color="#06b6d4" scale={0.3} />
       </OrbitalRing>
 
       {/* Stars */}
