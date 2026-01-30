@@ -212,7 +212,7 @@ export default function Dashboard() {
 
           <div className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/20 text-blue-500">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-500">
                 <LayoutDashboard className="h-5 w-5" />
               </div>
               <div>
@@ -224,7 +224,7 @@ export default function Dashboard() {
 
           <div className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-500/20 text-purple-500">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-500">
                 <Clock className="h-5 w-5" />
               </div>
               <div>
