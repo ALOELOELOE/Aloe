@@ -74,26 +74,28 @@ function MainCrystal({ position = [0, 0, 0], scale = 1 }) {
   );
 }
 
-// Small crystal positioned on a ring (as child of ring group)
-function RingCrystal({ radius, angle, color = "#8b5cf6", scale = 0.35 }) {
+// Small crystal that orbits along a ring path
+function RingCrystal({ radius, angle, color = "#6ee7b7", scale = 0.35, orbitSpeed = 0.3 }) {
   const meshRef = useRef();
-
-  // Position on the ring path
-  const position = useMemo(() => {
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    return [x, 0, z];
-  }, [radius, angle]);
+  const angleRef = useRef(angle);
 
   useFrame(() => {
+    // Update the orbit angle
+    angleRef.current += orbitSpeed * 0.01;
+
     if (meshRef.current) {
+      // Update position along the ring
+      meshRef.current.position.x = Math.cos(angleRef.current) * radius;
+      meshRef.current.position.z = Math.sin(angleRef.current) * radius;
+
+      // Self-rotation
       meshRef.current.rotation.x += 0.01;
       meshRef.current.rotation.z += 0.008;
     }
   });
 
   return (
-    <mesh ref={meshRef} position={position} scale={scale}>
+    <mesh ref={meshRef} position={[Math.cos(angle) * radius, 0, Math.sin(angle) * radius]} scale={scale}>
       <octahedronGeometry args={[1, 0]} />
       <MeshTransmissionMaterial
         backside
@@ -117,17 +119,24 @@ function RingCrystal({ radius, angle, color = "#8b5cf6", scale = 0.35 }) {
   );
 }
 
-// Glass sphere positioned on a ring (as child of ring group)
-function RingSphere({ radius, angle, color = "#67e8f9", scale = 0.3 }) {
-  // Position on the ring path
-  const position = useMemo(() => {
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    return [x, 0, z];
-  }, [radius, angle]);
+// Glass sphere that orbits along a ring path
+function RingSphere({ radius, angle, color = "#67e8f9", scale = 0.3, orbitSpeed = 0.3 }) {
+  const meshRef = useRef();
+  const angleRef = useRef(angle);
+
+  useFrame(() => {
+    // Update the orbit angle
+    angleRef.current += orbitSpeed * 0.01;
+
+    if (meshRef.current) {
+      // Update position along the ring
+      meshRef.current.position.x = Math.cos(angleRef.current) * radius;
+      meshRef.current.position.z = Math.sin(angleRef.current) * radius;
+    }
+  });
 
   return (
-    <mesh position={position} scale={scale}>
+    <mesh ref={meshRef} position={[Math.cos(angle) * radius, 0, Math.sin(angle) * radius]} scale={scale}>
       <sphereGeometry args={[1, 32, 32]} />
       <MeshTransmissionMaterial
         backside
@@ -248,7 +257,7 @@ const RING_1 = {
 
 const RING_2 = {
   radius: 3.5,
-  color: "#7c3aed",
+  color: "#6ee7b7",
   tilt: [Math.PI / 2.5, Math.PI / 2, 0], // Tilted sideways to cross
   speed: 0.3,
 };
@@ -263,7 +272,7 @@ function Scene({ onLoaded }) {
       <ambientLight intensity={0.3} />
       <directionalLight position={[10, 10, 5]} intensity={0.8} color="#ffffff" />
       <pointLight position={[-5, 5, 5]} intensity={0.6} color="#10b981" />
-      <pointLight position={[5, -5, 5]} intensity={0.4} color="#8b5cf6" />
+      <pointLight position={[5, -5, 5]} intensity={0.4} color="#6ee7b7" />
 
       {/* Environment for reflections */}
       <Environment preset="night" />
@@ -273,14 +282,14 @@ function Scene({ onLoaded }) {
 
       {/* Ring 1 (green) with orbiting elements - centered on emerald */}
       <OrbitalRing {...RING_1} center={CENTER}>
-        <RingCrystal radius={RING_1.radius} angle={0} color="#10b981" scale={0.35} />
-        <RingSphere radius={RING_1.radius} angle={Math.PI} color="#a5f3fc" scale={0.28} />
+        <RingCrystal radius={RING_1.radius} angle={0} color="#10b981" scale={0.35} orbitSpeed={0.4} />
+        <RingSphere radius={RING_1.radius} angle={Math.PI} color="#a5f3fc" scale={0.28} orbitSpeed={0.4} />
       </OrbitalRing>
 
-      {/* Ring 2 (purple) with orbiting elements - centered on emerald */}
+      {/* Ring 2 (mint) with orbiting elements - centered on emerald */}
       <OrbitalRing {...RING_2} center={CENTER}>
-        <RingCrystal radius={RING_2.radius} angle={Math.PI / 2} color="#7c3aed" scale={0.4} />
-        <RingCrystal radius={RING_2.radius} angle={Math.PI * 1.5} color="#06b6d4" scale={0.3} />
+        <RingCrystal radius={RING_2.radius} angle={Math.PI / 2} color="#6ee7b7" scale={0.4} orbitSpeed={0.35} />
+        <RingCrystal radius={RING_2.radius} angle={Math.PI * 1.5} color="#06b6d4" scale={0.3} orbitSpeed={0.35} />
       </OrbitalRing>
 
       {/* Stars */}
