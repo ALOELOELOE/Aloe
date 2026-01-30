@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import Image from "next/image";
 import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
 import { WalletConnect } from "@/components/WalletConnect";
 import { AuctionList } from "@/components/AuctionList";
@@ -18,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Shield, Loader2 } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   buildPlaceBidInputs,
@@ -185,7 +186,7 @@ export default function Home() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <Shield className="h-6 w-6 text-emerald-500" />
+            <Image src="/logo-removebg-preview.png" alt="Aloe" width={32} height={32} />
             <span className="text-xl font-bold">Aloe</span>
           </Link>
 

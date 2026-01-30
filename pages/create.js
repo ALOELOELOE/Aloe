@@ -4,10 +4,11 @@
 import { useRouter } from "next/router";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import Image from "next/image";
 import { WalletConnect } from "@/components/WalletConnect";
 import { CreateAuctionForm } from "@/components/CreateAuctionForm";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Shield } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,7 +40,7 @@ export default function CreateAuction() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <Shield className="h-6 w-6 text-emerald-500" />
+            <Image src="/logo-removebg-preview.png" alt="Aloe" width={32} height={32} />
             <span className="text-xl font-bold">Aloe</span>
           </Link>
 
