@@ -148,7 +148,7 @@ export default function Dashboard() {
       <AppHeader />
 
       {/* Main Content */}
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="px-6 py-8">
         {/* Page Header */}
         <motion.div
           className="mb-8"

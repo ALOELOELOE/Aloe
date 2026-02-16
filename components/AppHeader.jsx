@@ -42,7 +42,7 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+      <div className="flex h-16 items-center justify-between px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <Image
@@ -142,7 +142,7 @@ export function AppHeader() {
 
       {/* Mobile Navigation — horizontal scroll */}
       <div className="md:hidden border-t border-border">
-        <div className="mx-auto max-w-6xl px-4 flex items-center gap-1 overflow-x-auto py-2 scrollbar-hide">
+        <div className="px-6 flex items-center gap-1 overflow-x-auto py-2 scrollbar-hide">
           {Object.values(MODULES).map((mod) => {
             const isActive =
               currentPath === mod.path ||
