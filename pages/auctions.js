@@ -4,10 +4,9 @@
 import { useState } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
-import Image from "next/image";
 import { motion } from "framer-motion";
-import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
-import { WalletConnect } from "@/components/WalletConnect";
+import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
+import { AppHeader } from "@/components/AppHeader";
 import { AuctionList } from "@/components/AuctionList";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Loader2, ArrowLeft } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   buildPlaceBidInputs,
@@ -28,7 +27,7 @@ import {
   formatCredits,
   parseCreditsToMicro,
 } from "@/lib/aleo";
-import { PROGRAM_ID, NETWORK, AUCTION_STATUS } from "@/lib/constants";
+import { AUCTION_STATUS } from "@/lib/constants";
 import { useAuctionStore } from "@/store/auctionStore";
 
 const geistSans = Geist({
@@ -42,7 +41,7 @@ const geistMono = Geist_Mono({
 });
 
 export default function Auctions() {
-  const { publicKey, requestTransaction } = useWallet();
+  const { address, executeTransaction } = useWallet();
   const { updateAuction } = useAuctionStore();
 
   // Dialog state for bidding
@@ -75,7 +74,7 @@ export default function Auctions() {
 
   // Handle bid submission
   const handlePlaceBid = async () => {
-    if (!publicKey) {
+    if (!address) {
       toast.error("Please connect your wallet first");
       return;
     }
@@ -101,7 +100,7 @@ export default function Auctions() {
       console.log("[Aloe] ====== PLACE BID START ======");
       console.log("[Aloe] Auction ID:", selectedAuction.id);
       console.log("[Aloe] Bid Amount:", bidAmount, "credits (", bidMicro, "microcredits)");
-      console.log("[Aloe] Wallet Address:", publicKey);
+      console.log("[Aloe] Wallet Address:", address);
 
       // Build transaction inputs
       const txInputs = buildPlaceBidInputs({
@@ -121,20 +120,15 @@ export default function Auctions() {
 
       console.log("[Aloe] Requesting transaction from wallet...");
 
-      // Request transaction from wallet
-      const txId = await requestTransaction({
-        address: publicKey,
-        chainId: NETWORK,
-        transitions: [
-          {
-            program: txInputs.programId,
-            functionName: txInputs.functionName,
-            inputs: txInputs.inputs,
-          },
-        ],
+      // Execute transaction via @provablehq wallet adapter
+      const result = await executeTransaction({
+        program: txInputs.programId,
+        function: txInputs.functionName,
+        inputs: txInputs.inputs,
         fee: txInputs.fee,
-        feePrivate: false,
+        privateFee: false,
       });
+      const txId = result?.transactionId;
 
       console.log("[Aloe] Transaction submitted!");
       console.log("[Aloe] Transaction ID:", txId);
@@ -182,45 +176,11 @@ export default function Auctions() {
     <div
       className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background font-sans`}
     >
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo-removebg-preview.png" alt="Aloe" width={32} height={32} />
-            <span className="text-xl font-bold">Aloe</span>
-          </Link>
-
-          {/* Navigation */}
-          <nav className="flex items-center gap-4">
-            <Link href="/create">
-              <Button variant="outline" className="gap-2">
-                <Plus className="h-4 w-4" />
-                Create Auction
-              </Button>
-            </Link>
-            <WalletConnect />
-          </nav>
-        </div>
-      </header>
+      {/* Shared App Header */}
+      <AppHeader />
 
       {/* Main Content */}
       <main className="mx-auto max-w-6xl px-4 py-12 md:py-16">
-        {/* Back Link */}
-        <motion.div
-          className="mb-8"
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Link href="/">
-            <Button variant="ghost" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Home
-            </Button>
-          </Link>
-        </motion.div>
-
         {/* Page Header */}
         <motion.div
           className="mb-8"
@@ -327,14 +287,14 @@ export default function Auctions() {
             {isBidMode && selectedAuction?.status === AUCTION_STATUS.COMMIT_PHASE && (
               <Button
                 onClick={handlePlaceBid}
-                disabled={isPlacingBid || !publicKey || !bidAmount}
+                disabled={isPlacingBid || !address || !bidAmount}
               >
                 {isPlacingBid ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Placing Bid...
                   </>
-                ) : !publicKey ? (
+                ) : !address ? (
                   "Connect Wallet"
                 ) : (
                   "Place Sealed Bid"

@@ -4,9 +4,8 @@
 import { useRouter } from "next/router";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
-import Image from "next/image";
 import { motion } from "framer-motion";
-import { WalletConnect } from "@/components/WalletConnect";
+import { AppHeader } from "@/components/AppHeader";
 import { CreateAuctionForm } from "@/components/CreateAuctionForm";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
@@ -36,21 +35,8 @@ export default function CreateAuction() {
     <div
       className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background font-sans`}
     >
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo-removebg-preview.png" alt="Aloe" width={32} height={32} />
-            <span className="text-xl font-bold">Aloe</span>
-          </Link>
-
-          {/* Navigation */}
-          <nav className="flex items-center gap-4">
-            <WalletConnect />
-          </nav>
-        </div>
-      </header>
+      {/* Shared App Header */}
+      <AppHeader />
 
       {/* Main Content */}
       <main className="mx-auto max-w-6xl px-4 py-12 md:py-16">
