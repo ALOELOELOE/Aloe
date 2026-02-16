@@ -1,16 +1,20 @@
-# Wave 2: Complete Auction Lifecycle
+# Wave 2: Privacy Fix + Complete Auction Lifecycle
 
 **Timeline:** February 3 - February 17, 2026
-**Theme:** Reveal, Settle, Refund
+**Theme:** Make It Actually Private
 **Status:** In Progress
 
 ---
 
 ## Overview
 
-Wave 2 completes the core auction lifecycle by implementing the reveal phase, auction settlement, refund mechanisms, and cancellation. After this wave, Aloe's auction module supports a full end-to-end sealed-bid auction flow — from creation through settlement — with real credits locked and transferred via `credits.aleo`.
+Wave 2 has two goals: **fix the critical privacy leak** in the current contract and **complete the full auction lifecycle** (reveal, settle, refund, cancel).
 
-This is the first module to reach full lifecycle completion, establishing patterns that OTC, Launches, NFT, and RWA modules will follow in subsequent waves.
+**The critical fix:** Wave 1's `place_bid` uses `credits.aleo/transfer_public_as_signer`, which **leaks the bidder's address and deposit amount** on-chain. This defeats the purpose of a sealed-bid auction — anyone can see who bid and how much they deposited. A buildathon judge flagged this exact pattern on a competitor project.
+
+**The solution:** Replace `transfer_public_as_signer` with a pattern where the bidder passes a **private credits record** as input. The contract calls `credits.aleo/transfer_private_to_public` to lock the deposit into the program's public balance. This hides the sender address — the on-chain trace only shows credits moving *to* the program, not *from whom*.
+
+After this wave, Aloe supports a complete sealed-bid auction flow — from creation through settlement — with real credits locked and transferred via `credits.aleo`, and bidder addresses invisible during the commit phase.
 
 ---
 
@@ -18,15 +22,49 @@ This is the first module to reach full lifecycle completion, establishing patter
 
 ### Program: `aloe_auction_v2.aleo`
 
-> **credits.aleo Integration:** Wave 1's `place_bid` already transfers real credits into escrow via `credits.aleo/transfer_public_as_signer`. Wave 2's `claim_refund` and `settle_auction` must handle **actual credit transfers** back to users — not just mapping updates.
+**Location:** `contracts/zkauction/src/main.leo`
+
+### Privacy Fix: `place_bid` Rewrite
+
+**Before (Wave 1 — leaks privacy):**
+```
+// BAD: transfer_public_as_signer exposes the signer's address and deposit amount
+let transfer_future: Future = credits.aleo/transfer_public_as_signer(
+    self.address,
+    deposit
+);
+```
+
+**After (Wave 2 — private):**
+```
+// GOOD: Bidder passes a private credits record. transfer_private_to_public hides the sender.
+// The on-chain trace only shows credits arriving at the program address — not who sent them.
+let transfer_future: Future = credits.aleo/transfer_private_to_public(
+    payment,        // private credits.aleo/credits record (consumed)
+    self.address,   // program's public address (receives deposit)
+    deposit         // amount to lock
+);
+```
+
+The updated `place_bid` signature accepts a private `credits.aleo/credits` record instead of relying on the signer's public balance:
+
+```leo
+async transition place_bid(
+    public auction_id: field,
+    bid_amount: u64,
+    salt: field,
+    public deposit: u64,
+    payment: credits.aleo/credits   // NEW: private credits record input
+) -> (BidCommitment, Future)
+```
 
 ### New Transitions
 
 | Transition | Visibility | Description |
 |------------|------------|-------------|
-| `reveal_bid` | Private → Public | Bidder reveals bid amount and salt. Contract re-hashes the inputs using `BHP256` and verifies the result matches the commitment stored in the `BidCommitment` record. Also checks that the deposit covers the bid amount. On-chain finalize checks timing (must be between commit and reveal deadlines), updates `highest_bid` / `highest_bidder` if this bid is the new leader, and increments `revealed_count`. |
-| `settle_auction` | Public | Callable by anyone after the reveal deadline. Calls `credits.aleo/transfer_public` to send the winning bid amount to the auctioneer. Finalize awaits the transfer, then looks up the winner from `highest_bidder` and updates the auction status to settled (2). |
-| `claim_refund` | Private | Non-winners consume their `BidCommitment` record to reclaim deposits. Calls `credits.aleo/transfer_public` to send the deposit amount back to the bidder. Finalize awaits the transfer, then asserts the auction is settled, the caller is not the winner, and the refund hasn't already been claimed. Marks the commitment as claimed in `refund_claimed`. |
+| `reveal_bid` | Private → Public | Bidder reveals bid amount and salt. Contract re-hashes inputs using `BHP256` and verifies the result matches the commitment stored in the `BidCommitment` record. Also checks that the deposit covers the bid amount. Finalize checks timing (must be between commit and reveal deadlines), updates `highest_bid` / `highest_bidder` if this bid is the new leader, and increments `revealed_count`. |
+| `settle_auction` | Public | Callable by anyone after the reveal deadline. Calls `credits.aleo/transfer_public` to send the winning bid amount from the program's public balance to the auctioneer. Finalize awaits the transfer, looks up the winner from `highest_bidder`, and updates auction status to settled (2). |
+| `claim_refund` | Private | Non-winners consume their `BidCommitment` record to reclaim deposits. Calls `credits.aleo/transfer_public` to send the deposit amount from the program's public balance back to the bidder. Finalize awaits the transfer, asserts the auction is settled, the caller is not the winner, and the refund hasn't already been claimed. Marks the commitment as claimed in `refund_claimed`. |
 | `cancel_auction` | Public | Auctioneer cancels an auction that received zero bids. Finalize checks that the caller is the auctioneer, the bid count is zero, and updates the auction status to cancelled (3). |
 
 ### New Mappings
@@ -37,6 +75,22 @@ This is the first module to reach full lifecycle completion, establishing patter
 | `highest_bid` | `field => u64` | auction_id → current highest bid amount |
 | `highest_bidder` | `field => address` | auction_id → address of the current highest bidder |
 | `refund_claimed` | `field => bool` | commitment hash → whether refund was already claimed |
+
+### Credits Flow Diagram
+
+```
+COMMIT PHASE:
+  Bidder's private credits record  ──[transfer_private_to_public]──►  Program public balance
+  (sender hidden)                                                      (deposit locked)
+
+SETTLEMENT:
+  Program public balance  ──[transfer_public]──►  Auctioneer address
+  (winning bid amount)                              (payment received)
+
+REFUND:
+  Program public balance  ──[transfer_public]──►  Bidder address
+  (deposit amount)                                  (refund received)
+```
 
 ---
 
@@ -53,10 +107,11 @@ This is the first module to reach full lifecycle completion, establishing patter
 | AuctionStatusBadge | `components/AuctionStatusBadge.jsx` | Visual badge showing current auction phase with color coding |
 | AuctionDetailDialog | `components/AuctionDetailDialog.jsx` | Full auction detail view with phase-aware action buttons |
 
-### Transaction Builders (lib/aleo.js)
+### Transaction Builders (`lib/aleo.js`)
 
 | Function | Description |
 |----------|-------------|
+| `buildPlaceBidInputs(auctionId, bidAmount, salt, deposit, creditsRecord)` | Updated to accept a private credits record instead of using public balance |
 | `buildRevealBidInputs(bidRecord, bidAmount, salt)` | Constructs inputs for `reveal_bid` transition |
 | `buildSettleAuctionInputs(auctionId, auctioneer, winningAmount)` | Constructs inputs for `settle_auction` transition |
 | `buildClaimRefundInputs(bidRecord)` | Constructs inputs for `claim_refund` transition |
@@ -92,17 +147,25 @@ This is the first module to reach full lifecycle completion, establishing patter
 
 | Feature | Privacy Impact |
 |---------|----------------|
+| **Private credit deposits** | `transfer_private_to_public` hides the bidder's address during deposit — the #1 fix in this wave |
 | Commit-reveal completion | Bids remain hidden until reveal phase begins — no early information leakage |
 | Private reveal verification | Only the bidder can reveal their own bid using their private BidCommitment record |
-| No bid linkage | Cannot correlate multiple bids from same address during commit phase |
+| No bid linkage | Cannot correlate multiple bids from the same address during commit phase |
 | Selective disclosure | Only revealed bids become public; unrevealed bids remain private forever |
 | Deposit forfeiture | Unrevealed bids forfeit deposits — creates economic incentive to reveal honestly |
 
-**Privacy Score:** High — Completes the core privacy mechanism that makes sealed-bid auctions trustworthy on-chain.
+**Privacy Score:** High — Bidder addresses are invisible during the commit phase. Only the winning address is revealed at settlement. This is the core privacy guarantee that makes sealed-bid auctions trustworthy on-chain.
 
 ---
 
 ## Testing Checklist
+
+### Privacy Fix (place_bid)
+- [ ] `place_bid` accepts a private `credits.aleo/credits` record as input
+- [ ] `transfer_private_to_public` called instead of `transfer_public_as_signer`
+- [ ] Bidder address not visible on-chain during commit phase
+- [ ] Deposit amount correctly locked in program's public balance
+- [ ] Private credits record consumed after bid placement
 
 ### Reveal Bid
 - [ ] Can reveal bid during reveal phase with correct salt
@@ -117,7 +180,7 @@ This is the first module to reach full lifecycle completion, establishing patter
 - [ ] Cannot settle auction before reveal deadline
 - [ ] Cannot settle an already-settled auction
 - [ ] Correct winner determined (highest revealed bid)
-- [ ] Winning credits transferred to auctioneer via credits.aleo
+- [ ] Winning credits transferred to auctioneer via credits.aleo/transfer_public
 - [ ] Auction status updates to settled (2)
 
 ### Claim Refund
@@ -125,7 +188,7 @@ This is the first module to reach full lifecycle completion, establishing patter
 - [ ] Winners cannot claim refund (assertion fails)
 - [ ] Cannot claim refund twice (double-claim prevented)
 - [ ] Cannot claim refund for unrevealed bid (deposit forfeited)
-- [ ] Credits transferred back to bidder via credits.aleo
+- [ ] Credits transferred back to bidder via credits.aleo/transfer_public
 
 ### Cancel Auction
 - [ ] Auctioneer can cancel if zero bids received
@@ -139,6 +202,7 @@ This is the first module to reach full lifecycle completion, establishing patter
 
 | Metric | Target |
 |--------|--------|
+| Privacy fix verified | Bidder addresses invisible on-chain during commit phase |
 | Full auction cycle | Create → Bid → Reveal → Settle working end-to-end |
 | Refund success rate | 100% of valid refund claims processed correctly |
 | Credits conservation | Total credits in = total credits out (no value lost) |
@@ -149,10 +213,11 @@ This is the first module to reach full lifecycle completion, establishing patter
 
 ## Demo Scenarios
 
-1. **Happy Path**: Create auction → 2 bidders place bids → Both reveal → Higher bid wins → Winner announced → Loser claims refund → Auctioneer receives credits
-2. **No Reveal**: Bidder places bid but doesn't reveal → Deposit forfeited → Auction settles with remaining reveals
-3. **Single Bidder**: Only one bid → Single reveal → Wins by default → Settlement completes
-4. **Cancelled Auction**: Create auction → No bids placed → Auctioneer cancels → Status set to Cancelled
+1. **Happy Path**: Create auction → 2 bidders place bids (using private credits records) → Both reveal → Higher bid wins → Winner announced → Loser claims refund → Auctioneer receives credits
+2. **Privacy Verification**: Place bid → Check on-chain state → Confirm bidder address is NOT visible in any public mapping or transaction record
+3. **No Reveal**: Bidder places bid but doesn't reveal → Deposit forfeited → Auction settles with remaining reveals
+4. **Single Bidder**: Only one bid → Single reveal → Wins by default → Settlement completes
+5. **Cancelled Auction**: Create auction → No bids placed → Auctioneer cancels → Status set to Cancelled
 
 ---
 

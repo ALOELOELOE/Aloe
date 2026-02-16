@@ -1,100 +1,203 @@
-# Wave 6: NFT Marketplace Module
+# Wave 6: Multi-Use-Case Frontend Skins
 
 **Timeline:** March 31 - April 14, 2026
-**Theme:** Private NFT Trading
+**Theme:** One Primitive, Many Faces
 **Status:** Planned
 
 ---
 
 ## Overview
 
-Wave 6 introduces Aloe's fourth core module: **NFT Marketplace** — a private trading venue for non-fungible tokens using sealed-bid auctions and instant buy-now purchases. The module reuses the commit-reveal pattern from auctions (Wave 2-3) for NFT bidding, while adding a direct purchase path for fixed-price listings.
+Wave 6 proves the "auction primitive" thesis by building **different frontend skins** on top of the same `aloe_auction_v3.aleo` contract. Each skin reframes the auction for a specific use case — without writing any new smart contract code.
 
-The privacy advantage over existing NFT marketplaces: bid amounts on NFTs remain sealed until the reveal phase, preventing last-second bid sniping. Sellers also benefit — their portfolio holdings remain private since listing/ownership records are encrypted.
+**The point:** Aloe isn't a product for one audience. It's infrastructure. The same sealed-bid, Vickrey, or Dutch auction transition serves an art collector, a procurement officer, and a token issuer. The only thing that changes is the UI framing.
 
-**Current State:** The NFT page (`pages/nft.js`) has a "Coming Soon" placeholder. This wave replaces it with a full marketplace UI and smart contract.
+**Three skins:**
+1. **Classic Auction** (`/dashboard`) — The existing generic auction interface. Already built in Waves 1-4.
+2. **NFT Auction** (`/nft`) — Art-focused UI with collection display, image previews, and art-market language.
+3. **Procurement / RFQ** (`/procurement`) — Reverse auction skin where lowest bid wins. Framed as "Request for Quote" for buyers sourcing goods/services.
 
----
-
-## Smart Contract
-
-### Program: `aloe_nft_v1.aleo`
-
-**Location:** `contracts/zknft/src/main.leo`
-
-Imports `credits.aleo` for all value transfers.
-
-### Data Structures
-
-| Type | Name | Key Fields | Purpose |
-|------|------|------------|---------|
-| Struct | `Listing` | `listing_id`, `seller`, `collection_id`, `token_id`, `min_price`, `buy_now_price` (0 if none), `commit_deadline`, `reveal_deadline`, `status`, `winner`, `winning_bid` | On-chain listing metadata. Status: 0=active, 1=settled, 2=cancelled |
-| Struct | `NFTCommitmentData` | `bid_amount`, `salt`, `listing_id` | Helper struct for generating BHP256 commitment hashes on NFT bids |
-| Record | `NFTBid` | `owner`, `listing_id`, `commitment`, `bid_amount`, `salt`, `deposit` | Private sealed bid record. Same commit-reveal pattern as auction BidCommitment. |
-
-### Transitions
-
-| Transition | Visibility | Description |
-|------------|------------|-------------|
-| `create_listing` | Public | Seller specifies listing_id, collection_id, token_id, min_price, buy_now_price (0 to disable), and commit/reveal durations. Finalize stores the `Listing` struct in the `listings` mapping. |
-| `place_nft_bid` | Private + Public | Sealed bid on a listing. Generates a BHP256 commitment hash from (bid_amount, salt, listing_id). Calls `credits.aleo/transfer_public_as_signer` to lock the deposit. Returns an `NFTBid` record. Finalize checks listing is active and in commit phase, stores the commitment, and increments bid count. |
-| `reveal_nft_bid` | Private → Public | Same pattern as auction reveal. Bidder provides the `NFTBid` record, bid_amount, and salt. Contract re-hashes and verifies against the stored commitment. Finalize checks timing, updates `nft_highest_bid` / `nft_highest_bidder` if this is the new leader. |
-| `settle_listing` | Public | Callable after reveal deadline. Calls `credits.aleo/transfer_public` to send the winning bid to the seller. Finalize updates listing status to settled (1) with the winner. |
-| `claim_nft_refund` | Private | Non-winners consume their `NFTBid` record. Calls `credits.aleo/transfer_public` to return the deposit. Finalize checks listing is settled, caller is not winner, and refund hasn't been claimed. |
-| `buy_now` | Public | Instant purchase at the buy_now_price. Calls `credits.aleo/transfer_public_as_signer` to pay the seller directly. Finalize checks listing is active, buy_now_price > 0, submitted price matches exactly, and marks listing as settled with buyer as winner. |
-
-### Mappings
-
-| Mapping | Key → Value | Purpose |
-|---------|-------------|---------|
-| `listings` | `field => Listing` | listing_id → Listing struct |
-| `nft_bid_count` | `field => u32` | listing_id → number of bids |
-| `nft_commitments` | `field => bool` | commitment hash → exists (prevents duplicates) |
-| `nft_highest_bid` | `field => u64` | listing_id → highest revealed bid |
-| `nft_highest_bidder` | `field => address` | listing_id → highest bidder address |
-| `nft_refund_claimed` | `field => bool` | commitment hash → refund claimed |
+All three skins call the same `aloe_auction_v3.aleo` transitions. Zero new contract code.
 
 ---
 
-## Frontend
+## Skin 1: Classic Auction (Existing)
+
+**Page:** `/dashboard`
+**Status:** Already built (Waves 1-4)
+
+The default auction interface — generic sealed-bid, Vickrey, and Dutch auctions. No changes needed. This skin serves as the baseline.
+
+---
+
+## Skin 2: NFT Auction
+
+**Page:** `/nft` (repurposed from placeholder)
+
+An art-focused UI for auctioning NFTs. Uses the same first-price and Vickrey auction types from `aloe_auction_v3.aleo`, but the UI is designed around visual assets.
 
 ### New Components
 
 | Component | File Path | Description |
 |-----------|-----------|-------------|
-| NFTCard | `components/NFTCard.jsx` | Card showing NFT preview, collection name, current price, bid count, status |
-| NFTList | `components/NFTList.jsx` | Grid of listed NFTs with collection and price filters |
-| CreateListingForm | `components/CreateListingForm.jsx` | Form for listing an NFT — collection ID, token ID, min price, buy-now price |
-| NFTBidDialog | `components/NFTBidDialog.jsx` | Modal for placing sealed bid on an NFT listing |
-| NFTDetailDialog | `components/NFTDetailDialog.jsx` | Full listing detail with NFT preview, bid info, and action buttons |
-| BuyNowButton | `components/BuyNowButton.jsx` | One-click instant purchase at buy-now price |
-| NFTImagePreview | `components/NFTImagePreview.jsx` | Image/media preview component for NFT listings |
-| NFTRevealBidDialog | `components/NFTRevealBidDialog.jsx` | Modal for revealing NFT bids (same pattern as auction reveal) |
+| NFTAuctionCard | `components/NFTAuctionCard.jsx` | Card showing NFT image preview, collection name, current bid count, auction type badge, and time remaining |
+| NFTBidDialog | `components/NFTBidDialog.jsx` | Bid modal with NFT image prominently displayed, collection/token info, and sealed-bid form |
+| NFTImagePreview | `components/NFTImagePreview.jsx` | Image/media preview component — loads from metadata_hash or IPFS gateway |
+| NFTCollectionFilter | `components/NFTCollectionFilter.jsx` | Filter auctions by collection_id — dropdown with collection names |
 
-### Transaction Builders (`lib/nft.js`)
+### Page Structure (`pages/nft.js`)
 
-New file with six builder functions: `buildCreateListingInputs`, `buildPlaceNFTBidInputs`, `buildRevealNFTBidInputs`, `buildSettleListingInputs`, `buildClaimNFTRefundInputs`, and `buildBuyNowInputs`. Same pattern as `lib/aleo.js`.
+```
+┌─────────────────────────────────────────────┐
+│  NFT Auctions          [Filter by Collection]│
+├─────────────────────────────────────────────┤
+│ ┌──────────┐ ┌──────────┐ ┌──────────┐     │
+│ │ [Image]  │ │ [Image]  │ │ [Image]  │     │
+│ │ CoolNFT  │ │ RareApe  │ │ PixelArt │     │
+│ │ #1234    │ │ #0042    │ │ #7777    │     │
+│ │ 3 bids   │ │ Vickrey  │ │ Dutch    │     │
+│ │ 12h left │ │ 6h left  │ │ 150 cred │     │
+│ └──────────┘ └──────────┘ └──────────┘     │
+├─────────────────────────────────────────────┤
+│ Same sealed-bid privacy. Beautiful display.  │
+└─────────────────────────────────────────────┘
+```
 
-### New Store (`store/nftStore.js`)
+### How It Maps to the Contract
 
-Zustand store with state fields (`listings`, `isListing`, `isBidding`, `isRevealing`, `isBuying`) and actions (`fetchListings`, `getActiveListings`, `getListingsByCollection`, `createListing`, `placeNFTBid`, `revealNFTBid`, `buyNow`, `claimRefund`).
+| NFT UI Action | Contract Call | Notes |
+|---------------|---------------|-------|
+| List an NFT for auction | `create_first_price_auction` or `create_vickrey_auction` | `item_id` = hash(collection_id, token_id) |
+| Place sealed bid on NFT | `place_bid_v3` | Same commit-reveal as generic auctions |
+| Reveal bid | `reveal_bid_v3` | Same reveal flow |
+| Settle NFT auction | `settle_first_price` or `settle_vickrey` | Winner receives NFT (off-chain transfer) |
+| Buy NFT at Dutch price | `dutch_buy` | Instant purchase at current price |
 
-### Page Update (`pages/nft.js`)
+### NFT Metadata Handling
 
-Replace the "Coming Soon" placeholder with full marketplace UI:
-- NFT grid with collection filters and price range
-- Create Listing button (for sellers)
-- NFT detail view on card click with bid/buy actions
-- "My Listings" and "My Bids" tabs for user-specific views
-- Buy Now button for instant purchases
+NFT metadata (image URL, collection name, description) is stored off-chain and referenced by `item_id`. The frontend maintains a metadata lookup:
+
+```js
+// lib/nftMetadata.js
+// Maps item_id (hash of collection + token) to off-chain metadata
+const NFT_METADATA = {
+  // Populated from IPFS, Arweave, or a metadata API
+  [itemId]: { imageUrl, collectionName, tokenName, description }
+};
+```
+
+---
+
+## Skin 3: Procurement / RFQ
+
+**Page:** `/procurement` (new page)
+
+A reverse auction skin where the **buyer** posts a request and **suppliers** submit sealed bids. The lowest bid wins (best price for the buyer). This reframes the auction primitive for B2B procurement, freelance bidding, and service sourcing.
+
+### New Components
+
+| Component | File Path | Description |
+|-----------|-----------|-------------|
+| ProcurementCard | `components/ProcurementCard.jsx` | Card showing RFQ title, budget, bid count, and deadline. Uses corporate/business styling. |
+| SupplierBidDialog | `components/SupplierBidDialog.jsx` | Bid modal framed as "Submit Quote" — supplier enters their price to fulfill the request |
+| RFQForm | `components/RFQForm.jsx` | Form for creating a Request for Quote — buyer specifies what they need, max budget, and timeline |
+| ProcurementDetailDialog | `components/ProcurementDetailDialog.jsx` | Full RFQ detail view with supplier quote submission and status tracking |
+
+### Page Structure (`pages/procurement.js`)
+
+```
+┌──────────────────────────────────────────────┐
+│  Procurement Board        [+ Create RFQ]      │
+├──────────────────────────────────────────────┤
+│ ┌─────────────────┐ ┌─────────────────┐      │
+│ │ Website Redesign │ │ Logo Design     │      │
+│ │ Budget: 5000 cr  │ │ Budget: 500 cr  │      │
+│ │ 4 quotes         │ │ 7 quotes        │      │
+│ │ 2 days left      │ │ 12h left        │      │
+│ │ [Submit Quote]   │ │ [Submit Quote]  │      │
+│ └─────────────────┘ └─────────────────┘      │
+├──────────────────────────────────────────────┤
+│ Sealed quotes. Lowest wins. No bid sniping.   │
+└──────────────────────────────────────────────┘
+```
+
+### How It Maps to the Contract
+
+| Procurement UI Action | Contract Call | Notes |
+|-----------------------|---------------|-------|
+| Create RFQ | `create_first_price_auction` | `min_bid` set to 1 (any quote accepted). `item_id` = hash of RFQ description. |
+| Submit quote (sealed) | `place_bid_v3` | Supplier commits their price quote as a sealed bid |
+| Reveal quote | `reveal_bid_v3` | Supplier reveals their price |
+| Award contract | `settle_first_price` | **UI inverts the logic**: displays "Lowest quote wins" but the on-chain mechanism still picks the highest bid. To make lowest-win work, quotes are submitted as `max_budget - actual_quote`. See note below. |
+
+### Reverse Auction Implementation Note
+
+The v3 contract always picks the **highest** revealed bid as winner. To implement "lowest bid wins" without new contract code:
+
+```
+// Supplier wants to quote 200 credits for a 5000-credit budget RFQ
+// On-chain bid = max_budget - quote = 5000 - 200 = 4800
+// The supplier bidding the LOWEST quote submits the HIGHEST on-chain bid
+
+// At settlement:
+// Winner's on-chain bid = 4800
+// Actual quote = max_budget - winning_bid = 5000 - 4800 = 200
+// Buyer pays 200 credits to the winning supplier
+```
+
+This is a **UI-level inversion** — the contract works normally, but the frontend translates between "lowest quote" and "highest on-chain bid."
+
+---
+
+## Deprecated Pages
+
+| Old Page | Action | Redirect |
+|----------|--------|----------|
+| `/otc` | Deprecated | Redirect to `/dashboard` |
+| `/launches` | Deprecated | Redirect to `/dashboard` |
+| `/rwa` | Deprecated | Redirect to `/dashboard` |
+
+### Redirect Implementation
+
+```js
+// pages/otc.js, pages/launches.js, pages/rwa.js
+import { useEffect } from 'react';
+import { useRouter } from 'next/router';
+
+export default function DeprecatedPage() {
+  const router = useRouter();
+  useEffect(() => { router.replace('/dashboard'); }, []);
+  return null;
+}
+```
+
+---
+
+## Frontend
 
 ### Constants Update (`lib/constants.js`)
 
-Add `NFT: "aloe_nft_v1.aleo"` to the `PROGRAMS` object. Add `LISTING_STATUS` enum (ACTIVE=0, SETTLED=1, CANCELLED=2).
+Replace the multi-module `MODULES` object with `USE_CASES`:
 
-### Dashboard Integration
+```js
+// Use cases showcase — same primitive, different applications
+export const USE_CASES = {
+  CLASSIC: { id: 'classic', name: 'Auctions', path: '/dashboard', status: 'live' },
+  NFT: { id: 'nft', name: 'NFT Auctions', path: '/nft', status: 'live' },
+  PROCUREMENT: { id: 'procurement', name: 'Procurement', path: '/procurement', status: 'live' },
+};
+```
 
-Add NFT activity data to the `activityStore.js` (created in Wave 3). The activity dashboard (`/my-activity`) now shows auction, OTC, launch, and NFT activity in its feed and summary cards.
+### Landing Page Update (`pages/index.js`)
+
+Replace any remaining multi-module cards with use-case showcase:
+
+| Section | Content |
+|---------|---------|
+| Hero | "Privacy-Preserving Auction Primitive" — one contract, infinite use cases |
+| Use-case cards | Classic Auctions, NFT Sales, Procurement — each links to its skin page |
+| How it works | "Same sealed-bid contract. Different UI for different markets." |
+| For Developers | Link to integration guide (Wave 5) |
 
 ---
 
@@ -102,49 +205,43 @@ Add NFT activity data to the `activityStore.js` (created in Wave 3). The activit
 
 | Feature | Privacy Impact |
 |---------|----------------|
-| Sealed NFT bids | Bid amounts hidden during commit phase — prevents last-second sniping |
-| Private bid records | NFTBid records encrypted — only bidder knows their bid amount |
-| Portfolio privacy | Sellers' NFT holdings not exposed by browsing listings |
-| Hidden bid counts (per bidder) | Cannot tell how many NFTs a single address is bidding on |
-| Buy-now privacy | Instant purchase reveals price but hides buyer identity until settlement |
+| Same privacy, different UIs | NFT bidders and procurement suppliers get identical sealed-bid privacy |
+| No skin-specific data leakage | Skins only change presentation — no additional on-chain data stored |
+| Procurement quote privacy | Supplier quotes remain sealed — no competitor can see your pricing |
+| NFT bid privacy | Art market bids hidden until reveal — prevents shill bidding intelligence |
 
-**Privacy Score:** High — Solves bid sniping on NFT auctions while maintaining portfolio privacy for sellers.
+**Privacy Score:** High — Privacy properties are contract-level, not UI-level. Changing the skin doesn't change the privacy guarantees.
 
 ---
 
 ## Testing Checklist
 
-### Create Listing
-- [ ] Seller can create a listing with valid parameters
-- [ ] Listing stored in `listings` mapping
-- [ ] Buy-now price correctly set (or 0 for auction-only)
-- [ ] Cannot create listing with min_price = 0
+### NFT Auction Skin
+- [ ] `/nft` page loads with NFT-focused UI
+- [ ] Can create an auction from NFT page (routes to `create_first_price_auction` or `create_vickrey_auction`)
+- [ ] NFT image preview renders from metadata
+- [ ] Collection filter works correctly
+- [ ] Bid, reveal, settle flow works identically to `/dashboard`
+- [ ] Dutch NFT auctions show DutchPriceTicker
 
-### Place NFT Bid
-- [ ] Bidder can place sealed bid during commit phase
-- [ ] Commitment hash correctly generated
-- [ ] Deposit locked via credits.aleo
-- [ ] NFTBid record returned to bidder
-- [ ] Cannot bid below min_price (deposit check)
+### Procurement Skin
+- [ ] `/procurement` page loads with RFQ-focused UI
+- [ ] Can create an RFQ (routes to `create_first_price_auction`)
+- [ ] Supplier can submit a sealed quote
+- [ ] Quote inversion works: lowest quote = highest on-chain bid
+- [ ] Settlement correctly displays winning quote (inverted from on-chain bid)
+- [ ] Reveal flow works with inverted amounts
 
-### Reveal NFT Bid
-- [ ] Can reveal with correct salt during reveal phase
-- [ ] Cannot reveal with wrong salt
-- [ ] Highest bid tracked correctly
-- [ ] Cannot reveal outside reveal phase
+### Deprecated Pages
+- [ ] `/otc` redirects to `/dashboard`
+- [ ] `/launches` redirects to `/dashboard`
+- [ ] `/rwa` redirects to `/dashboard`
+- [ ] No 404 errors on deprecated routes
 
-### Buy Now
-- [ ] Can buy at exact buy-now price
-- [ ] Credits transferred to seller
-- [ ] Listing status set to settled
-- [ ] Cannot buy-now if no buy-now price set
-- [ ] Cannot buy-now on already-settled listing
-
-### Settle / Refund
-- [ ] Listing settles with highest bidder as winner
-- [ ] Non-winners can claim refund
-- [ ] Winner cannot claim refund
-- [ ] Cannot claim refund twice
+### Cross-Skin Consistency
+- [ ] Auction created on `/dashboard` appears on all skins (if applicable)
+- [ ] Same auction_id resolves to same on-chain data regardless of skin
+- [ ] Wallet connection persists across skin navigation
 
 ---
 
@@ -152,20 +249,20 @@ Add NFT activity data to the `activityStore.js` (created in Wave 3). The activit
 
 | Metric | Target |
 |--------|--------|
-| Listing flow | Full create → bid → reveal → settle working |
-| Buy-now flow | Instant purchase fully functional |
-| Bid privacy | Bid amounts invisible on-chain during commit phase |
-| Escrow accuracy | 100% of deposits locked and released correctly |
-| NFT display | Collection and token metadata render correctly |
+| NFT skin | Full auction flow working with NFT-specific UI |
+| Procurement skin | RFQ creation + sealed quote + award flow working |
+| Zero new contract code | All skins use existing `aloe_auction_v3.aleo` transitions |
+| Redirect coverage | All deprecated routes redirect cleanly |
+| Use-case breadth | 3 distinct UI presentations of the same primitive |
 
 ---
 
 ## Demo Scenarios
 
-1. **Sealed-Bid NFT Sale**: Seller lists NFT (min 50 credits) → 3 bidders place sealed bids → Reveal phase → Highest bid wins → Seller receives credits → Losers refunded
-2. **Buy Now**: Seller lists NFT with buy-now at 200 credits → Buyer clicks Buy Now → Instant transfer → Listing closed
-3. **No Bids**: Seller lists NFT → No bids placed → Seller cancels listing
-4. **Mixed**: Listing has both bids and a buy-now price → Someone buys now before reveal → Existing bidders refunded
+1. **NFT Auction**: Create sealed-bid NFT auction on `/nft` → 2 bidders place bids → Reveal → Highest bid wins → Art-focused settlement UI
+2. **Procurement RFQ**: Buyer creates RFQ on `/procurement` with 5000 credit budget → 3 suppliers submit sealed quotes (200, 350, 500) → Reveal → Lowest quote (200) wins → Buyer pays 200
+3. **Cross-Skin**: Create a generic auction on `/dashboard` → Same auction visible on `/nft` with image preview → Demonstrates that skins are just views on the same contract state
+4. **Deprecated Redirect**: Navigate to `/otc` → Automatically redirected to `/dashboard`
 
 ---
 

@@ -1,94 +1,173 @@
-# Wave 5: Token Launches Module
+# Wave 5: Composability — Importable Auction Primitive
 
 **Timeline:** March 17 - March 31, 2026
-**Theme:** Fair Private Launchpad
+**Theme:** Build Once, Use Everywhere
 **Status:** Planned
 
 ---
 
 ## Overview
 
-Wave 5 introduces Aloe's third core module: **Token Launches** — a fair launchpad where projects can distribute tokens using a private commitment pattern. Individual allocation sizes remain hidden, preventing whale sniping and ensuring fair distribution.
+Wave 5 transforms Aloe from an *application* into a *primitive*. Other Leo programs can `import aloe_auction_v3.aleo` and call its transitions directly — embedding private auctions into any dApp without writing auction logic from scratch.
 
-The key privacy innovation: participants commit to allocation amounts privately, so no one can see how much others are buying. Only the total committed amount and participant count are public. This solves the common launchpad problem where whales monitor commitments and front-run smaller participants.
+**The big idea:** Aloe is to auctions what Uniswap is to swaps. Uniswap doesn't try to be an NFT marketplace, a lending platform, and a token launchpad. It does one thing — swaps — and other protocols compose on top of it. Aloe does one thing — private auctions — and other programs import it.
 
-**Current State:** The Launches page (`pages/launches.js`) has a "Coming Soon" placeholder. This wave replaces it with a fully functional launchpad UI and smart contract.
+**Demo wrapper:** To prove composability, this wave builds a demo program `aloe_nft_auction_v1.aleo` that imports the v3 auction contract and adds NFT-specific metadata (collection_id, token_id). This demonstrates how *any* dApp can embed private auctions without reimplementing the commit-reveal scheme, credits handling, or settlement logic.
+
+**No major UI changes.** The focus is contract composability and developer documentation. A "For Developers" section is added to the landing page.
 
 ---
 
 ## Smart Contract
 
-### Program: `aloe_launches_v1.aleo`
+### Refactoring `aloe_auction_v3.aleo` for Import-Friendliness
 
-**Location:** `contracts/zklaunches/src/main.leo`
+Before building the wrapper, the v3 contract needs clean-up to be a good import target:
 
-Imports `credits.aleo` for all value transfers.
+| Change | Reason |
+|--------|--------|
+| Consistent transition naming | All transitions follow `verb_noun` pattern: `create_auction`, `place_bid`, `reveal_bid`, `settle_auction`, `claim_refund` |
+| Documented inputs/outputs | Every transition has inline comments explaining each parameter |
+| Clean record signatures | `BidCommitmentV3` fields are ordered logically: owner → auction_id → commitment → amounts |
+| Minimal public surface | Only transitions needed by importers are public. Internal helpers are private functions. |
 
-### Data Structures
+### Demo Wrapper: `aloe_nft_auction_v1.aleo`
 
-| Type | Name | Key Fields | Purpose |
-|------|------|------------|---------|
-| Struct | `Launch` | `launch_id`, `creator`, `token_name_hash`, `total_supply`, `price_per_token`, `max_per_wallet`, `start_block`, `end_block`, `settle_block`, `status`, `total_committed`, `participant_count` | On-chain launch metadata. Status: 0=pending, 1=active, 2=settled, 3=cancelled. `total_committed` and `participant_count` are the only publicly-updating fields. |
-| Record | `LaunchCommitment` | `owner`, `launch_id`, `commit_amount`, `token_allocation`, `salt` | Private record proving a participant's commitment. The `commit_amount` is only visible to the owner. |
-| Record | `TokenAllocation` | `owner`, `launch_id`, `token_name_hash`, `amount` | Private record representing the participant's received token allocation after settlement |
+**Location:** `contracts/demo_nft_auction/src/main.leo`
 
-### Transitions
+This program imports `aloe_auction_v3.aleo` and wraps it with NFT-specific logic.
 
-| Transition | Visibility | Description |
-|------------|------------|-------------|
-| `create_launch` | Public | Creator specifies launch_id, token_name_hash (BHP256 hash of name for privacy), total_supply, price_per_token, max_per_wallet, and durations for commit and settle phases. Finalize stores the `Launch` struct in the `launches` mapping with status=pending. |
-| `commit_to_launch` | Private + Public | Participant commits credits to buy tokens. Takes launch_id, private commit_amount, and private salt. Calls `credits.aleo/transfer_public_as_signer` to lock the commit_amount into program escrow. Returns a `LaunchCommitment` record. Finalize checks timing (must be in active phase), then increments `total_committed` and `participant_count` — but the individual `commit_amount` stays private. |
-| `settle_launch` | Public | Creator settles the launch after commit phase ends. Calculates token allocations based on commitments. For oversubscribed launches, applies pro-rata distribution. |
-| `claim_launch_tokens` | Private | Participant consumes their `LaunchCommitment` record to receive a `TokenAllocation` record after settlement. Finalize checks launch is settled and participant hasn't already claimed. |
-| `claim_launch_refund` | Private | If launch is cancelled, participant consumes `LaunchCommitment` and receives credits back via `credits.aleo/transfer_public`. Finalize checks launch status is cancelled. |
+```leo
+import aloe_auction_v3.aleo;
+import credits.aleo;
 
-### Mappings
+program aloe_nft_auction_v1.aleo {
 
-| Mapping | Key → Value | Purpose |
-|---------|-------------|---------|
-| `launches` | `field => Launch` | launch_id → Launch struct with all metadata |
-| `launch_claimed` | `field => bool` | hash(launch_id, participant) → whether allocation was claimed |
+    // NFT metadata stored alongside the auction
+    struct NFTAuctionMeta {
+        auction_id: field,
+        collection_id: field,       // NFT collection identifier
+        token_id: field,            // Specific token within the collection
+        metadata_hash: field,       // BHP256 hash of off-chain metadata (image, description, etc.)
+    }
+
+    // Mapping: auction_id => NFT metadata
+    mapping nft_auction_meta: field => NFTAuctionMeta;
+
+    // Create an NFT auction — wraps aloe_auction_v3.aleo/create_first_price_auction
+    // and stores NFT metadata alongside it
+    async transition create_nft_auction(
+        public auction_id: field,
+        public collection_id: field,
+        public token_id: field,
+        public metadata_hash: field,
+        public min_bid: u64,
+        public commit_duration: u32,
+        public reveal_duration: u32
+    ) -> Future {
+        // Delegate auction creation to the base primitive
+        let auction_future: Future = aloe_auction_v3.aleo/create_first_price_auction(
+            auction_id, collection_id, min_bid, commit_duration, reveal_duration
+        );
+
+        return finalize_create_nft_auction(
+            auction_future, auction_id, collection_id, token_id, metadata_hash
+        );
+    }
+
+    async function finalize_create_nft_auction(
+        auction_future: Future,
+        auction_id: field,
+        collection_id: field,
+        token_id: field,
+        metadata_hash: field
+    ) {
+        // Finalize the base auction first
+        auction_future.await();
+
+        // Store NFT-specific metadata
+        let meta: NFTAuctionMeta = NFTAuctionMeta {
+            auction_id: auction_id,
+            collection_id: collection_id,
+            token_id: token_id,
+            metadata_hash: metadata_hash,
+        };
+        Mapping::set(nft_auction_meta, auction_id, meta);
+    }
+
+    // Bidding, revealing, settling, and refunding all delegate directly
+    // to aloe_auction_v3.aleo transitions — no need to reimplement
+}
+```
+
+### What the Wrapper Demonstrates
+
+| Concept | How It's Shown |
+|---------|----------------|
+| Import pattern | `import aloe_auction_v3.aleo` at the top of the program |
+| Cross-program calls | `aloe_auction_v3.aleo/create_first_price_auction(...)` called from wrapper transition |
+| Future chaining | Wrapper's finalize awaits the base auction's future before storing metadata |
+| Metadata extension | Wrapper adds NFT-specific fields without modifying the base auction contract |
+| Privacy inheritance | Wrapper inherits all privacy guarantees (sealed bids, hidden addresses) from the base contract |
+
+---
+
+## Documentation
+
+### New File: `docs/integration_guide.md`
+
+A developer guide explaining how to import and use `aloe_auction_v3.aleo` in your own Leo program.
+
+**Sections:**
+1. **Quick Start** — Minimal example: import, create auction, place bid
+2. **Available Transitions** — Full reference for every transition with parameter types and return values
+3. **Record Types** — `BidCommitmentV3` fields and how to handle them in wrapper programs
+4. **Credits Handling** — How `transfer_private_to_public` works in cross-program calls
+5. **Auction Types** — When to use first-price vs Vickrey vs Dutch
+6. **Example Wrappers** — NFT auction (this wave), procurement RFQ (Wave 6), token sale (future)
+7. **Privacy Guarantees** — What's private, what's public, and what the wrapper inherits
+
+### Code Examples in the Guide
+
+```leo
+// Example: Import Aloe and create a procurement auction
+import aloe_auction_v3.aleo;
+
+program my_procurement.aleo {
+    // Create a reverse auction where lowest bid wins
+    // (using first-price with custom settlement logic)
+    async transition create_rfq(
+        public rfq_id: field,
+        public max_budget: u64,
+        public commit_duration: u32,
+        public reveal_duration: u32
+    ) -> Future {
+        return aloe_auction_v3.aleo/create_first_price_auction(
+            rfq_id, rfq_id, max_budget, commit_duration, reveal_duration
+        );
+    }
+}
+```
 
 ---
 
 ## Frontend
 
-### New Components
+### Landing Page Update (`pages/index.js`)
 
-| Component | File Path | Description |
-|-----------|-----------|-------------|
-| LaunchCard | `components/LaunchCard.jsx` | Card showing token name, price, supply, progress bar, and status badge |
-| LaunchList | `components/LaunchList.jsx` | Grid of active and upcoming launches with filters |
-| CreateLaunchForm | `components/CreateLaunchForm.jsx` | Form for creating a new token launch with validation |
-| CommitToLaunchDialog | `components/CommitToLaunchDialog.jsx` | Modal for committing credits — amount input, cost preview, allocation estimate |
-| LaunchProgressBar | `components/LaunchProgressBar.jsx` | Visual progress showing total_committed vs total_supply * price |
-| LaunchDetailDialog | `components/LaunchDetailDialog.jsx` | Full launch detail view with commit action and statistics |
-| LaunchStatusBadge | `components/LaunchStatusBadge.jsx` | Badge: Upcoming / Active / Settled / Cancelled |
+Add a "For Developers" section below the existing auction UI content:
 
-### Transaction Builders (`lib/launches.js`)
+| Element | Description |
+|---------|-------------|
+| Section heading | "Build With Aloe — The Auction Primitive" |
+| Composability diagram | Visual showing: `Your Program → imports → aloe_auction_v3.aleo → uses → credits.aleo` |
+| Code snippet | Leo import example showing 3-line integration |
+| Use case cards | NFT Sales, Procurement, Token Launches, RWA Trading — each card links to integration guide |
+| CTA button | "Read the Integration Guide →" linking to `docs/integration_guide.md` |
 
-New file with five builder functions: `buildCreateLaunchInputs`, `buildCommitToLaunchInputs`, `buildSettleLaunchInputs`, `buildClaimLaunchTokensInputs`, and `buildClaimLaunchRefundInputs`. Each follows the same pattern as `lib/aleo.js`.
+### No New Pages or Major Components
 
-### New Store (`store/launchStore.js`)
-
-Zustand store with state fields (`launches`, `isCreating`, `isCommitting`, `isClaiming`) and actions (`fetchLaunches`, `getActiveLaunches`, `getUpcomingLaunches`, `createLaunch`, `commitToLaunch`, `claimTokens`, `claimRefund`).
-
-### Page Update (`pages/launches.js`)
-
-Replace the "Coming Soon" placeholder with full launchpad UI:
-- Launch list with tabs: Active / Upcoming / Completed
-- Create Launch button (connected wallet required)
-- Launch detail view on card click
-- Commit dialog with amount input and cost calculator
-- Progress bar showing participation level
-
-### Constants Update (`lib/constants.js`)
-
-Add `LAUNCHES: "aloe_launches_v1.aleo"` to the `PROGRAMS` object. Add `LAUNCH_STATUS` enum (PENDING=0, ACTIVE=1, SETTLED=2, CANCELLED=3).
-
-### Dashboard Integration
-
-Add launch activity data to the `activityStore.js` (created in Wave 3). The activity dashboard (`/my-activity`) now shows auction, OTC, and launch activity in its feed and summary cards.
+This wave is contract + documentation focused. The frontend changes are limited to the landing page "For Developers" section.
 
 ---
 
@@ -96,45 +175,36 @@ Add launch activity data to the `activityStore.js` (created in Wave 3). The acti
 
 | Feature | Privacy Impact |
 |---------|----------------|
-| Hidden allocation sizes | Individual commit amounts are private records — no one sees how much others are buying |
-| Anti-whale protection | Whales cannot monitor other commitments and front-run smaller participants |
-| Private token receipts | TokenAllocation records are encrypted — only the owner sees their allocation |
-| Public aggregate only | Only total_committed and participant_count are public — individual amounts hidden |
-| Fair distribution | max_per_wallet enforced without revealing who is near the limit |
+| Privacy inheritance | Any program importing `aloe_auction_v3.aleo` inherits sealed-bid privacy — no need to reimplement |
+| Wrapper transparency | The wrapper's NFT metadata is public, but the *bids on those NFTs* remain private |
+| Composable privacy | Privacy properties compose: base contract guarantees hold regardless of wrapper logic |
+| Cross-program isolation | Wrapper's finalize logic runs after base auction's finalize — no state leakage between programs |
 
-**Privacy Score:** Very High — Solves the #1 problem with public launchpads: whale sniping via commitment monitoring.
+**Privacy Score:** High — Composability preserves all privacy guarantees. The wrapper adds metadata without weakening the base contract's sealed-bid properties.
 
 ---
 
 ## Testing Checklist
 
-### Create Launch
-- [ ] Creator can create a launch with valid parameters
-- [ ] Launch stored in on-chain `launches` mapping
-- [ ] Status set to pending (0) initially
-- [ ] Cannot create launch with zero supply or zero price
+### Contract Composability
+- [ ] `aloe_nft_auction_v1.aleo` compiles successfully with `aloe_auction_v3.aleo` import
+- [ ] `create_nft_auction` creates an auction via cross-program call and stores NFT metadata
+- [ ] Bidding on wrapper-created auctions works via `aloe_auction_v3.aleo/place_bid_v3`
+- [ ] Revealing, settling, and refunding all work through the base contract's transitions
+- [ ] NFT metadata correctly stored in `nft_auction_meta` mapping
+- [ ] Future chaining works — wrapper finalize runs only after base auction finalize succeeds
 
-### Commit to Launch
-- [ ] Participant can commit credits during active phase
-- [ ] Credits correctly escrowed via credits.aleo
-- [ ] LaunchCommitment record returned with correct amounts
-- [ ] total_committed and participant_count update publicly
-- [ ] Individual commit_amount remains private
-- [ ] Cannot commit more than max_per_wallet
-- [ ] Cannot commit after end_block
+### Privacy Inheritance
+- [ ] Bids on NFT auctions are sealed (same privacy as regular auctions)
+- [ ] Bidder addresses invisible during commit phase (same guarantee)
+- [ ] Wrapper metadata (collection_id, token_id) is public, bid amounts are private
+- [ ] Settlement transfers credits correctly via the base contract
 
-### Settle Launch
-- [ ] Creator can settle after commit phase ends
-- [ ] Token allocations calculated correctly
-- [ ] Oversubscribed launches: pro-rata distribution
-- [ ] Cannot settle before end_block
-- [ ] Cannot settle already-settled launch
-
-### Claim / Refund
-- [ ] Participants can claim TokenAllocation after settlement
-- [ ] Participants can claim refund if launch is cancelled
-- [ ] Cannot claim twice
-- [ ] Excess credits refunded in oversubscribed launches
+### Integration Guide
+- [ ] All code examples compile and run correctly
+- [ ] Transition signatures match the actual contract interface
+- [ ] Record types documented accurately
+- [ ] Credits handling instructions are correct
 
 ---
 
@@ -142,20 +212,19 @@ Add launch activity data to the `activityStore.js` (created in Wave 3). The acti
 
 | Metric | Target |
 |--------|--------|
-| Launch creation | Full create → commit → settle flow working |
-| Privacy verification | Individual commit amounts not visible on-chain |
-| Escrow accuracy | 100% of committed credits properly locked and distributed |
-| Refund reliability | 100% of cancelled launch refunds processed |
-| Fair distribution | max_per_wallet correctly enforced |
+| Wrapper compiles | `aloe_nft_auction_v1.aleo` builds with zero errors |
+| Full flow through wrapper | Create NFT auction → Bid → Reveal → Settle via cross-program calls |
+| Integration guide | Complete with 7 sections, compilable code examples |
+| Privacy maintained | Wrapper-created auctions have identical privacy to direct v3 auctions |
+| Developer experience | New developer can import and use `aloe_auction_v3.aleo` in < 30 minutes using the guide |
 
 ---
 
 ## Demo Scenarios
 
-1. **Happy Path**: Creator launches token (1000 supply, 10 credits each) → 5 participants commit varying amounts → Creator settles → Participants claim tokens
-2. **Oversubscribed**: Total commitments exceed supply → Pro-rata distribution → Excess credits refunded
-3. **Cancelled Launch**: Creator cancels before settlement → All participants reclaim credits
-4. **Max Per Wallet**: Participant tries to commit more than max_per_wallet → Transaction rejected
+1. **NFT Auction via Wrapper**: Deploy `aloe_nft_auction_v1.aleo` → Create NFT auction with collection/token IDs → 2 bidders place sealed bids → Reveal → Settle → NFT metadata and auction result both on-chain
+2. **Direct vs Wrapper**: Show same auction flow running through `aloe_auction_v3.aleo` directly and through the wrapper — identical privacy, identical credits handling
+3. **Developer Walkthrough**: Start from empty Leo project → `import aloe_auction_v3.aleo` → Create a custom wrapper program → Run a test auction — all using the integration guide
 
 ---
 

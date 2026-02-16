@@ -1,62 +1,111 @@
-# Wave 7: RWA Exchange Module
+# Wave 7: Reverse + Batch Auction Types
 
 **Timeline:** April 14 - April 28, 2026
-**Theme:** Real-World Asset Trading
+**Theme:** Covering All Auction Formats
 **Status:** Planned
 
 ---
 
 ## Overview
 
-Wave 7 introduces Aloe's fifth and final core module: **RWA (Real-World Asset) Exchange** — a marketplace for tokenized real-world assets including real estate, commodities, securities, and other off-chain assets. This module brings private ownership and trading of fractional asset units to Aleo.
+Wave 7 completes the auction type library by adding **reverse auctions** and **batch auctions** — the final two formats that round out the Aloe primitive.
 
-The key privacy innovations: ownership records are fully private (only the holder sees their units), purchase amounts are hidden, and secondary market transfers are invisible to third parties. Only the aggregate holder count is public — individual holdings remain encrypted.
+**Reverse auctions (auction_type=3):** A buyer posts what they want and a maximum budget. Sellers submit sealed bids — the **lowest** bid wins. Use cases: procurement, freelance bidding, service sourcing, supply chain. Wave 6's procurement skin used a UI-level bid inversion to simulate reverse auctions; Wave 7 makes it a first-class on-chain type with proper lowest-bid-wins logic.
 
-This completes Aloe's 5-module suite: Auctions + OTC + Launches + NFT + **RWA**.
+**Batch auctions (auction_type=4):** Multiple identical items sold simultaneously at a **uniform clearing price**. All bids above the clearing price win; all winners pay the same price. Use cases: token sales, treasury auctions, fair price discovery, IPO-style distributions. This is the same mechanism used by the US Treasury for bond auctions and by many token launch platforms.
 
-**Current State:** The RWA page (`pages/rwa.js`) has a "Coming Soon" placeholder. This wave replaces it with a full exchange UI and smart contract.
+After this wave, Aloe supports **5 auction types** — the most comprehensive auction primitive on any blockchain:
+1. First-Price (sealed-bid)
+2. Vickrey (second-price)
+3. Dutch (descending-price)
+4. Reverse (lowest-bid-wins)
+5. Batch (uniform clearing price)
 
 ---
 
 ## Smart Contract
 
-### Program: `aloe_rwa_v1.aleo`
+### Program: `aloe_auction_v3.aleo` (extended)
 
-**Location:** `contracts/zkrwa/src/main.leo`
+**Location:** `contracts/zkauction_v3/src/main.leo`
 
-Imports `credits.aleo` for all value transfers.
+### Complete Auction Type Constants
 
-### Data Structures
+| Value | Type | Bidding Model | Winner Determination | Use Case |
+|-------|------|---------------|---------------------|----------|
+| `0u8` | First-Price | Sealed commit-reveal | Highest bid wins, pays own bid | Standard auctions |
+| `1u8` | Vickrey | Sealed commit-reveal | Highest bid wins, pays 2nd-highest | Truthful bidding |
+| `2u8` | Dutch | Open descending price | First buyer wins at current price | Speed sales |
+| `3u8` | Reverse | Sealed commit-reveal | Lowest bid wins | Procurement, sourcing |
+| `4u8` | Batch | Sealed commit-reveal | All bids above clearing price win, pay uniform price | Token sales, fair distribution |
 
-| Type | Name | Key Fields | Purpose |
-|------|------|------------|---------|
-| Struct | `RWAAsset` | `asset_id`, `issuer`, `asset_type` (u8), `asset_hash`, `total_units`, `price_per_unit`, `units_sold`, `holder_count`, `attestation_hash`, `status` | On-chain asset metadata. `units_sold` and `holder_count` are the only publicly-updating fields. Status: 0=active, 1=delisted |
-| Record | `RWAOwnership` | `owner`, `asset_id`, `asset_type`, `units` | Private ownership record — only the holder sees their units |
-| Record | `PurchaseOrder` | `owner`, `asset_id`, `units`, `total_cost`, `issuer` | Private purchase receipt |
-
-### Asset Type Constants
-
-| Value | Asset Type | Examples |
-|-------|-----------|----------|
-| `0u8` | Real Estate | Tokenized property, REITs |
-| `1u8` | Commodity | Gold, silver, oil fractions |
-| `2u8` | Security | Bonds, equity tokens |
-| `3u8` | Other | Carbon credits, collectibles |
-
-### Transitions
+### Reverse Auction Transitions
 
 | Transition | Visibility | Description |
 |------------|------------|-------------|
-| `register_asset` | Public | Issuer specifies asset_id, asset_type (must be 0-3), asset_hash (BHP256 hash of off-chain metadata), total_units, price_per_unit, and attestation_hash (reference to legal compliance docs). Finalize checks no duplicate asset_id exists and stores the `RWAAsset` struct in the `assets` mapping. |
-| `purchase_units` | Private + Public | Buyer specifies asset_id, private units amount, and issuer address. Calls `credits.aleo/transfer_public_as_signer` to pay the issuer directly (no escrow — immediate transfer). Returns an `RWAOwnership` record and `PurchaseOrder` receipt to the buyer. Finalize checks asset is active, enough units remain, and increments `units_sold` and `holder_count`. |
-| `transfer_units` | Private | Fully private secondary market transfer. Owner consumes their `RWAOwnership` record, specifies a recipient and amount. Returns two new `RWAOwnership` records: one with remaining units for sender, one with transferred units for recipient. No on-chain mapping updates — entirely private. |
-| `delist_asset` | Public | Issuer removes their asset from the exchange. Finalize checks caller is the issuer and sets status to delisted (1). Existing `RWAOwnership` records remain valid — only prevents new purchases. |
+| `create_reverse_auction` | Public | Buyer specifies auction_id, item_id (description hash), max_budget, commit_duration, and reveal_duration. Sets `auction_type` to 3. The `min_bid` field is repurposed as `max_budget` — bids above this are rejected. |
+| `place_reverse_bid` | Private + Public | Seller submits a sealed bid representing their asking price. Accepts a private `credits.aleo/credits` record for deposit (guarantees seller commitment). Deposit = bid amount. Commitment hash uses same BHP256 scheme. |
+| `reveal_reverse_bid` | Private → Public | Seller reveals their asking price. Finalize tracks the **lowest** bid and lowest bidder (opposite of first-price). If a new bid is lower than the current lowest, it becomes the new leader. |
+| `settle_reverse` | Public | Buyer pays the winning (lowest) bid amount to the winning seller via `credits.aleo/transfer_public`. Losing sellers' deposits are refunded. |
 
-### Mappings
+### Reverse-Specific Mappings
 
 | Mapping | Key → Value | Purpose |
 |---------|-------------|---------|
-| `assets` | `field => RWAAsset` | asset_id → RWAAsset struct |
+| `lowest_bid` | `field => u64` | auction_id → lowest revealed bid |
+| `lowest_bidder` | `field => address` | auction_id → lowest bidder (winning seller) |
+
+### Batch Auction Transitions
+
+| Transition | Visibility | Description |
+|------------|------------|-------------|
+| `create_batch_auction` | Public | Seller specifies auction_id, item_id, total_units (number of items for sale), min_price_per_unit, commit_duration, and reveal_duration. Sets `auction_type` to 4. |
+| `place_batch_bid` | Private + Public | Bidder submits a sealed bid specifying quantity and price_per_unit. Deposit = quantity * price_per_unit. Same BHP256 commitment scheme, but commitment includes both quantity and price. |
+| `reveal_batch_bid` | Private → Public | Bidder reveals quantity and price_per_unit. Finalize adds the bid to an ordered list for clearing price calculation. |
+| `settle_batch` | Public | Calculates the clearing price: bids are sorted by price (descending), units allocated until total_units exhausted. The clearing price = the lowest winning bid's price. All winners pay this uniform price. Excess deposits (bid_price - clearing_price) * quantity are refundable. Auctioneer receives clearing_price * total_units via `credits.aleo/transfer_public`. |
+
+### Batch-Specific Data Structures
+
+| Type | Name | Key Fields | Purpose |
+|------|------|------------|---------|
+| Record | `BatchBid` | `owner`, `auction_id`, `commitment`, `quantity` (u64), `price_per_unit` (u64), `salt`, `deposit` | Extended bid record with quantity field |
+| Struct | `BatchBidData` | `quantity`, `price_per_unit`, `salt`, `auction_id` | Helper struct for BHP256 batch commitment hashing |
+
+### Batch-Specific Mappings
+
+| Mapping | Key → Value | Purpose |
+|---------|-------------|---------|
+| `batch_clearing_price` | `field => u64` | auction_id → uniform clearing price |
+| `batch_total_units` | `field => u64` | auction_id → total units available |
+| `batch_units_allocated` | `field => u64` | auction_id → total units allocated to winners |
+| `batch_bid_prices` | `field => u64` | hash(auction_id, bid_index) → revealed bid price (for clearing calculation) |
+| `batch_bid_quantities` | `field => u64` | hash(auction_id, bid_index) → revealed bid quantity |
+
+### Batch Settlement Algorithm (Finalize)
+
+```
+// Pseudocode for settle_batch finalize
+
+// Step 1: Sort revealed bids by price (descending)
+// (In practice, reveal_batch_bid inserts bids in sorted order using
+// a counter + comparison approach since Leo doesn't have dynamic arrays)
+
+// Step 2: Allocate units starting from highest-priced bids
+let remaining_units = total_units;
+let clearing_price = 0;
+for each bid in sorted_bids (descending price):
+    if remaining_units >= bid.quantity:
+        remaining_units -= bid.quantity;
+        clearing_price = bid.price_per_unit; // Last allocated bid sets clearing price
+    else:
+        // Partial fill: this bid gets remaining_units at their price
+        clearing_price = bid.price_per_unit;
+        remaining_units = 0;
+        break;
+
+// Step 3: All winners pay clearing_price * their_quantity
+// Step 4: Excess = (bid_price - clearing_price) * quantity → refundable
+```
 
 ---
 
@@ -66,39 +115,47 @@ Imports `credits.aleo` for all value transfers.
 
 | Component | File Path | Description |
 |-----------|-----------|-------------|
-| RWAAssetCard | `components/RWAAssetCard.jsx` | Card showing asset name, type icon, units available, price, attestation badge |
-| RWAAssetList | `components/RWAAssetList.jsx` | Grid of available RWA assets with type and price filters |
-| RegisterAssetForm | `components/RegisterAssetForm.jsx` | Form for issuers to register a new RWA — type selector, units, price, attestation reference |
-| PurchaseUnitsDialog | `components/PurchaseUnitsDialog.jsx` | Modal for purchasing fractional units — amount input, cost calculator |
-| RWAPortfolio | `components/RWAPortfolio.jsx` | User's private portfolio view showing owned RWA units across all assets |
-| AttestationBadge | `components/AttestationBadge.jsx` | Visual indicator showing asset has a verified attestation hash |
-| AssetTypeIcon | `components/AssetTypeIcon.jsx` | Icon component for asset types: building (real estate), gem (commodity), shield (security), box (other) |
-| TransferUnitsDialog | `components/TransferUnitsDialog.jsx` | Modal for transferring owned units to another address |
+| ReverseAuctionForm | `components/ReverseAuctionForm.jsx` | Form for creating a reverse auction — max budget, description, duration |
+| ReverseAuctionCard | `components/ReverseAuctionCard.jsx` | Card showing RFQ details, quote count, budget, and "Submit Quote" action |
+| BatchAuctionForm | `components/BatchAuctionForm.jsx` | Form for creating a batch auction — total units, min price per unit, duration |
+| BatchAuctionCard | `components/BatchAuctionCard.jsx` | Card showing units available, current bid count, min price |
+| BatchBidDialog | `components/BatchBidDialog.jsx` | Modal for batch bidding — quantity and price_per_unit inputs with cost calculator |
+| BatchResultsView | `components/BatchResultsView.jsx` | Post-settlement view showing clearing price, winning bids, and unit allocation |
 
-### Transaction Builders (`lib/rwa.js`)
+### Updated Components
 
-New file with four builder functions: `buildRegisterAssetInputs`, `buildPurchaseUnitsInputs`, `buildTransferUnitsInputs`, and `buildDelistAssetInputs`. Same pattern as other lib files.
+| Component | Change |
+|-----------|--------|
+| `AuctionTypeSelector.jsx` | Updated with all 5 types: First-Price, Vickrey, Dutch, Reverse, Batch |
+| `CreateAuctionForm.jsx` | Conditional fields for each type. Reverse: max_budget. Batch: total_units, min_price_per_unit. |
+| `AuctionList.jsx` | Filter includes all 5 types. Type-specific card rendering. |
+| `AuctionDetailDialog.jsx` | Type-aware detail view for reverse (shows lowest bid) and batch (shows clearing price). |
 
-### New Store (`store/rwaStore.js`)
+### Transaction Builders (`lib/auctionV3.js` — extended)
 
-Zustand store with state fields (`assets`, `portfolio`, `isRegistering`, `isPurchasing`, `isTransferring`) and actions (`fetchAssets`, `getAssetsByType`, `getActiveAssets`, `registerAsset`, `purchaseUnits`, `transferUnits`, `fetchPortfolio`).
-
-### Page Update (`pages/rwa.js`)
-
-Replace the "Coming Soon" placeholder with full exchange UI:
-- Asset grid with type filters (Real Estate / Commodity / Security / Other)
-- Register Asset button (for issuers)
-- Asset detail view on card click with purchase action
-- "My Portfolio" tab showing private ownership records
-- Transfer dialog for secondary market transfers
+| Function | Description |
+|----------|-------------|
+| `buildCreateReverseAuctionInputs(...)` | Inputs for `create_reverse_auction` |
+| `buildPlaceReverseBidInputs(auctionId, bidAmount, salt, deposit, creditsRecord)` | Inputs for `place_reverse_bid` |
+| `buildRevealReverseBidInputs(bidRecord, bidAmount, salt)` | Inputs for `reveal_reverse_bid` |
+| `buildSettleReverseInputs(auctionId)` | Inputs for `settle_reverse` |
+| `buildCreateBatchAuctionInputs(...)` | Inputs for `create_batch_auction` |
+| `buildPlaceBatchBidInputs(auctionId, quantity, pricePerUnit, salt, deposit, creditsRecord)` | Inputs for `place_batch_bid` |
+| `buildRevealBatchBidInputs(bidRecord, quantity, pricePerUnit, salt)` | Inputs for `reveal_batch_bid` |
+| `buildSettleBatchInputs(auctionId)` | Inputs for `settle_batch` |
 
 ### Constants Update (`lib/constants.js`)
 
-Add `RWA: "aloe_rwa_v1.aleo"` to the `PROGRAMS` object. Add `ASSET_TYPE` enum (REAL_ESTATE=0, COMMODITY=1, SECURITY=2, OTHER=3), `ASSET_TYPE_LABELS` for display, and `ASSET_STATUS` enum (ACTIVE=0, DELISTED=1).
-
-### Dashboard Integration
-
-Add RWA activity data to the `activityStore.js` (created in Wave 3). The activity dashboard (`/my-activity`) now shows all 5 modules' activity — completing the cross-module activity feed originally scaffolded in Wave 3.
+Update `AUCTION_TYPES` enum:
+```js
+AUCTION_TYPES: {
+  FIRST_PRICE: 0,
+  VICKREY: 1,
+  DUTCH: 2,
+  REVERSE: 3,
+  BATCH: 4,
+}
+```
 
 ---
 
@@ -106,46 +163,44 @@ Add RWA activity data to the `activityStore.js` (created in Wave 3). The activit
 
 | Feature | Privacy Impact |
 |---------|----------------|
-| Private ownership records | RWAOwnership records are encrypted — only the holder sees their units |
-| Hidden purchase amounts | Individual purchase sizes are private; only units_sold updates publicly |
-| Anonymous secondary transfers | transfer_units is fully private — no on-chain trace of who transferred to whom |
-| Aggregate-only public data | Only units_sold and holder_count are public — individual holdings invisible |
-| Portfolio concealment | No way to determine what assets an address holds by scanning the chain |
+| Sealed reverse bids | Supplier quotes hidden — no competitor intelligence during commit phase |
+| Batch bid privacy | Individual bid prices and quantities hidden until reveal — prevents strategic bidding |
+| Uniform clearing price | All winners pay the same price — no price discrimination |
+| Private batch quantities | How many units each bidder wants remains hidden during commit phase |
 
-**Privacy Score:** Very High — Ownership privacy is critical for real-world assets where revealing holdings could invite targeted attacks or regulatory arbitrage.
+**Privacy Score:** High — Reverse auctions prevent quote leakage in procurement. Batch auctions prevent strategic underbidding by hiding demand.
 
 ---
 
 ## Testing Checklist
 
-### Register Asset
-- [ ] Issuer can register an asset with valid parameters
-- [ ] Asset stored in `assets` mapping with correct metadata
-- [ ] Cannot register with invalid asset_type (>3)
-- [ ] Cannot register duplicate asset_id
-- [ ] Attestation hash stored correctly
+### Reverse Auction
+- [ ] Can create a reverse auction with max_budget
+- [ ] Sellers can place sealed bids (asking prices)
+- [ ] Reveal correctly tracks the lowest bid / lowest bidder
+- [ ] Settlement pays the winning (lowest) seller
+- [ ] Losing sellers' deposits refunded
+- [ ] Cannot bid above max_budget
+- [ ] Works with 1 seller (wins by default)
+- [ ] Works with 3+ sellers
 
-### Purchase Units
-- [ ] Buyer can purchase units from an active asset
-- [ ] Credits transferred to issuer via credits.aleo
-- [ ] RWAOwnership record returned with correct units
-- [ ] PurchaseOrder receipt returned
-- [ ] Cannot purchase more units than available (total_units - units_sold)
-- [ ] Cannot purchase from delisted asset
-- [ ] units_sold and holder_count update correctly
+### Batch Auction
+- [ ] Can create a batch auction with total_units and min_price_per_unit
+- [ ] Bidders can submit sealed bids with quantity + price_per_unit
+- [ ] Deposit correctly calculated as quantity * price_per_unit
+- [ ] Reveal correctly records bid for clearing price calculation
+- [ ] Settlement calculates correct clearing price
+- [ ] All winners pay uniform clearing price
+- [ ] Excess deposits (bid_price - clearing_price) * quantity refundable
+- [ ] Partial fill: last winning bidder may get fewer units than requested
+- [ ] Works with more demand than supply (oversubscribed)
+- [ ] Works with less demand than supply (undersubscribed)
 
-### Transfer Units
-- [ ] Owner can transfer units to another address
-- [ ] Sender's remaining units calculated correctly
-- [ ] Recipient receives new RWAOwnership record
-- [ ] Cannot transfer more units than owned
-- [ ] Transfer is fully private (no public mapping updates)
-
-### Delist Asset
-- [ ] Issuer can delist their own asset
-- [ ] Non-issuer cannot delist
-- [ ] Delisted asset cannot receive new purchases
-- [ ] Existing ownership records remain valid after delisting
+### All 5 Auction Types
+- [ ] AuctionTypeSelector shows all 5 types
+- [ ] Each type creates correct auction on-chain
+- [ ] Dashboard correctly renders all 5 types with appropriate cards
+- [ ] Type filter works across all types
 
 ---
 
@@ -153,20 +208,20 @@ Add RWA activity data to the `activityStore.js` (created in Wave 3). The activit
 
 | Metric | Target |
 |--------|--------|
-| Asset registration | Full register → purchase → transfer flow working |
-| Ownership privacy | Individual holdings not visible on-chain |
-| Transfer privacy | Secondary market transfers leave no public trace |
-| Payment accuracy | 100% of purchase credits correctly transferred to issuers |
-| Portfolio display | User's private portfolio renders correctly from records |
+| Reverse flow | Create → sellers bid → reveal → lowest wins → payment |
+| Batch flow | Create → bidders bid → reveal → clearing price → uniform payment |
+| 5 types working | All auction types functional in single v3 contract |
+| Clearing price accuracy | Batch clearing price matches expected calculation |
+| No contract size issues | v3 contract compiles and deploys within Aleo size limits |
 
 ---
 
 ## Demo Scenarios
 
-1. **Property Purchase**: Issuer registers 1000 units of tokenized property → 5 buyers purchase varying amounts → Each sees only their own holdings
-2. **Secondary Transfer**: Owner transfers 50 units to another address → Transfer is invisible on-chain → Recipient sees units in their portfolio
-3. **Commodity Investment**: Issuer registers gold-backed tokens → Buyers purchase fractional units → Portfolio shows gold allocation
-4. **Delisting**: Issuer delists an asset → Existing holders retain their records → No new purchases allowed
+1. **Reverse Auction**: Buyer posts RFQ (max 5000 credits) → 3 suppliers quote (200, 350, 500) → Reveal → Lowest quote (200) wins → Buyer pays 200 to winning supplier → Other suppliers refunded
+2. **Batch Token Sale**: Seller offers 100 tokens → 5 bidders bid varying quantities and prices → Clearing price calculated at 50 credits/token → All bidders above 50 win → All pay 50 per token → Excess refunded
+3. **Oversubscribed Batch**: 100 tokens available → Demand for 300 tokens → Top bidders allocated first → Clearing price higher due to competition
+4. **Full Type Showcase**: Dashboard displays one of each type (First-Price, Vickrey, Dutch, Reverse, Batch) side by side — demonstrates the breadth of the Aloe auction primitive
 
 ---
 

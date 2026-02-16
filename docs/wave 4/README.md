@@ -1,102 +1,143 @@
-# Wave 4: OTC Trading Module
+# Wave 4: Dutch (Descending-Price) Auctions + On-Chain Reader
 
 **Timeline:** March 3 - March 17, 2026
-**Theme:** Private Peer-to-Peer Trades
+**Theme:** Price Discovery
 **Status:** Planned
 
 ---
 
 ## Overview
 
-Wave 4 introduces Aloe's second core module: **OTC (Over-the-Counter) Trading**. This module enables private peer-to-peer deals where a maker creates an offer with locked escrow, and a specific taker can accept it for an atomic swap. All deal amounts are kept private using Aleo's record-based architecture.
+Wave 4 adds **Dutch (descending-price) auctions** — the third auction type in the Aloe primitive — and builds an **on-chain state reader** for querying auction data from Aleo mappings.
 
-The OTC module solves **front-running** — a critical problem in public DeFi where bots intercept trades by observing the mempool. With Aloe OTC, deal terms are only visible to the maker and designated taker.
+**Why Dutch auctions:** The price starts high and drops every block. The first buyer to commit wins at the current price. Dutch auctions are used by flower markets, US Treasury bond sales, and Google's IPO. On Aleo, the privacy advantage is unique: observers can't see *when* a buyer commits, hiding demand signals that would otherwise reveal market sentiment.
 
-**Current State:** The OTC page (`pages/otc.js`) has a basic UI with DealCard and DealList display components connected to `store/dealStore.js`. The "New Deal" button exists but is disabled (no CreateDealForm yet). This wave adds the smart contract, creates the deal creation form, and wires all components to real transactions.
+**Key difference from sealed-bid:** Dutch auctions skip the commit-reveal cycle entirely. It's a single atomic purchase — the buyer locks credits at the current price and the auction settles immediately. This makes Dutch auctions faster and simpler than first-price or Vickrey.
+
+**On-chain reader:** A new utility (`lib/aleoReader.js`) for querying on-chain mappings via the Aleo REST API. Used by the frontend to display real-time auction state (current Dutch price, bid counts, auction status) without relying on a centralized backend.
 
 ---
 
 ## Smart Contract
 
-### Program: `aloe_otc_v1.aleo`
+### Program: `aloe_auction_v3.aleo` (extended)
 
-**Location:** `contracts/zkotc/src/main.leo`
+**Location:** `contracts/zkauction_v3/src/main.leo`
 
-Imports `credits.aleo` for all value transfers.
+Dutch auction transitions are added to the existing v3 contract alongside first-price and Vickrey.
 
-### Data Structures
+### Updated Auction Type Constants
 
-| Type | Name | Fields | Purpose |
-|------|------|--------|---------|
-| Struct | `Deal` | `deal_id`, `maker`, `taker`, `offer_amount`, `ask_amount`, `expiry_block`, `status` | On-chain deal metadata. Status values: 0=open, 1=accepted, 2=cancelled, 3=expired |
-| Record | `MakerEscrow` | `owner`, `deal_id`, `amount` | Private record proving maker's escrow deposit. Required to cancel the deal. |
-| Record | `DealReceipt` | `owner`, `deal_id`, `counterparty`, `amount_sent`, `amount_received` | Private receipt given to both parties after deal completion |
+| Value | Type | Bidding Model | Winner Pays | Use Case |
+|-------|------|---------------|-------------|----------|
+| `0u8` | First-Price | Sealed commit-reveal | Highest bid | Standard auctions (Wave 2-3) |
+| `1u8` | Vickrey | Sealed commit-reveal | 2nd-highest bid | Truthful bidding (Wave 3) |
+| `2u8` | Dutch | Open descending price | Current price at purchase | Speed sales, liquidations, price discovery |
 
-### Transitions
+### Extended AuctionV3 Struct
+
+New fields for Dutch auctions:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `starting_price` | `u64` | Initial price at auction start (Dutch only) |
+| `price_decrement` | `u64` | Amount price decreases per block (Dutch only) |
+| `min_price` | `u64` | Price floor — price won't drop below this (Dutch only) |
+
+### Dutch Transitions
 
 | Transition | Visibility | Description |
 |------------|------------|-------------|
-| `create_deal` | Private + Public | Maker specifies deal_id, taker address (or zero for open deals), offer_amount, ask_amount, and expiry_block. Calls `credits.aleo/transfer_public_as_signer` to lock the offer_amount into the program's public balance. Returns a `MakerEscrow` record to the maker. Finalize stores the `Deal` struct in the `deals` mapping. |
-| `accept_deal` | Private + Public | Taker calls with deal_id, ask_amount, and maker address. Calls `credits.aleo/transfer_public_as_signer` to pay the ask_amount to the maker, then `credits.aleo/transfer_public` to release the escrowed offer_amount to the taker. Returns `DealReceipt` records to both parties. Finalize checks deal is open, not expired, and taker matches (if designated). Updates status to accepted (1). |
-| `cancel_deal` | Private | Maker consumes their `MakerEscrow` record. Calls `credits.aleo/transfer_public` to return the escrowed amount to the maker. Finalize checks deal is still open and updates status to cancelled (2). |
+| `create_dutch_auction` | Public | Creator specifies auction_id, item_id, starting_price, price_decrement, min_price (price floor), and duration (in blocks). Sets `auction_type` to 2. No commit-reveal deadlines needed — uses a single `end_block` deadline. Finalize stores the AuctionV3 struct with Dutch-specific fields. |
+| `dutch_buy` | Private + Public | First buyer wins. Accepts a private `credits.aleo/credits` record. Buyer specifies auction_id, auctioneer, and the current_price they're willing to pay. Calls `credits.aleo/transfer_private_to_public` to lock the price amount, then `credits.aleo/transfer_public` to immediately pay the auctioneer. **Single atomic transaction — no reveal step.** Finalize calculates the expected price as `starting_price - (price_decrement * blocks_elapsed)`, floors it at `min_price`, asserts the submitted price matches, and marks the auction as settled immediately with the buyer as winner. |
 
-### Mappings
+### Dutch Price Calculation (on-chain)
 
-| Mapping | Key → Value | Purpose |
-|---------|-------------|---------|
-| `deals` | `field => Deal` | deal_id → Deal struct with all metadata |
-| `maker_deal_count` | `address => u32` | Track active deal count per maker for UX queries |
+```leo
+// Finalize logic for dutch_buy
+let elapsed: u32 = block.height - auction.start_block;
+let decrement: u64 = (auction.price_decrement as u64) * (elapsed as u64);
+let expected_price: u64 = auction.starting_price.saturating_sub(decrement);
+// Floor at min_price
+let current_price: u64 = expected_price > auction.min_price ? expected_price : auction.min_price;
+// Buyer must pay exactly the current price
+assert_eq(submitted_price, current_price);
+```
+
+---
+
+## On-Chain State Reader
+
+### New File: `lib/aleoReader.js`
+
+Utility for querying Aleo on-chain mappings via the REST API. Replaces mock data with real blockchain state.
+
+| Function | Description |
+|----------|-------------|
+| `getAuction(programId, auctionId)` | Fetch an auction struct from the `auctions` mapping |
+| `getBidCount(programId, auctionId)` | Fetch the bid count for an auction |
+| `getHighestBid(programId, auctionId)` | Fetch the current highest revealed bid |
+| `getCurrentDutchPrice(programId, auctionId)` | Calculate the live Dutch price from `starting_price`, `price_decrement`, and current block height |
+| `getBlockHeight()` | Fetch the current Aleo block height |
+| `getMappingValue(programId, mappingName, key)` | Generic mapping query (used by all above functions) |
+
+### REST API Pattern
+
+```js
+// Generic mapping query via Aleo REST API
+async function getMappingValue(programId, mappingName, key) {
+  const url = `${RPC_ENDPOINT}/testnet/program/${programId}/mapping/${mappingName}/${key}`;
+  const response = await fetch(url);
+  return response.json();
+}
+
+// Dutch price calculation (client-side, mirrors on-chain logic)
+function getCurrentDutchPrice(auction, currentBlockHeight) {
+  const elapsed = currentBlockHeight - auction.start_block;
+  const decrement = auction.price_decrement * elapsed;
+  const price = Math.max(auction.starting_price - decrement, auction.min_price);
+  return price;
+}
+```
 
 ---
 
 ## Frontend
 
-### Updated Components
-
-| Component | File Path | Change |
-|-----------|-----------|--------|
-| DealCard | `components/DealCard.jsx` | Add Accept and Cancel action buttons, wire to real on-chain data |
-| DealList | `components/DealList.jsx` | Fetch real deals from on-chain mappings |
-
 ### New Components
 
 | Component | File Path | Description |
 |-----------|-----------|-------------|
-| CreateDealForm | `components/CreateDealForm.jsx` | Form for creating a new OTC deal — taker address, offer/ask amounts, expiry |
-| DealDetailDialog | `components/DealDetailDialog.jsx` | Full deal detail view with terms, status, and action buttons |
-| AcceptDealButton | `components/AcceptDealButton.jsx` | Button to accept a deal — pays ask_amount, receives offer_amount |
-| CancelDealButton | `components/CancelDealButton.jsx` | Button for maker to cancel and reclaim escrow |
-| DealStatusBadge | `components/DealStatusBadge.jsx` | Visual badge: Open / Accepted / Cancelled / Expired |
+| DutchPriceTicker | `components/DutchPriceTicker.jsx` | Live descending price display. Polls block height and recalculates price every ~15 seconds. Shows current price, time until next decrement, and min price floor. |
+| DutchBuyButton | `components/DutchBuyButton.jsx` | One-click purchase at the current Dutch price. Confirms the price with the user before submitting. Disabled if auction has ended or been purchased. |
+| DutchAuctionCard | `components/DutchAuctionCard.jsx` | Auction card variant for Dutch auctions showing live price ticker, starting price, and price floor. |
 
-### Transaction Builders (`lib/otc.js`)
+### Updated Components
 
-New file with three builder functions: `buildCreateDealInputs`, `buildAcceptDealInputs`, and `buildCancelDealInputs`. Each constructs the programId, functionName, and inputs array following the same pattern as `lib/aleo.js`.
+| Component | Change |
+|-----------|--------|
+| `AuctionTypeSelector.jsx` | Add Dutch option (3 types: First-Price / Vickrey / Dutch) |
+| `CreateAuctionForm.jsx` | Conditional fields for Dutch: starting_price, price_decrement, min_price. Hide commit/reveal durations for Dutch (single duration instead). |
+| `AuctionList.jsx` | Filter by auction type. Dutch auctions show live price instead of bid count. |
+| `AuctionDetailDialog.jsx` | Dutch variant shows price ticker and buy button instead of bid/reveal UI. |
 
-### Store Updates (`store/dealStore.js`)
+### Transaction Builders (`lib/auctionV3.js` — extended)
 
-| Field / Action | Description |
-|----------------|-------------|
-| `isCreating` | Loading state for deal creation |
-| `isAccepting` | Loading state for deal acceptance |
-| `isCancelling` | Loading state for deal cancellation |
-| `getOpenDeals()` | Fetch all deals with status=0 (open) |
-| `getDealsByMaker(address)` | Fetch deals created by a specific maker |
-| `getDealsByTaker(address)` | Fetch deals where user is the designated taker |
-| `createDeal(params)` | Execute create_deal transaction |
-| `acceptDeal(dealId)` | Execute accept_deal transaction |
-| `cancelDeal(escrowRecord)` | Execute cancel_deal transaction |
+| Function | Description |
+|----------|-------------|
+| `buildCreateDutchAuctionInputs(auctionId, itemId, startingPrice, priceDecrement, minPrice, duration)` | Inputs for `create_dutch_auction` |
+| `buildDutchBuyInputs(auctionId, auctioneer, currentPrice, creditsRecord)` | Inputs for `dutch_buy` — includes private credits record |
 
-### Page Update (`pages/otc.js`)
+### Constants Update (`lib/constants.js`)
 
-Replace the placeholder OTC page with full deal browsing and creation:
-- Deal list with filters (Open / My Deals / Completed)
-- Create Deal form accessible via "Create Deal" button
-- Deal detail dialog on card click
-- Accept/Cancel actions based on user role (maker vs taker)
-
-### Dashboard Integration
-
-Add OTC activity data to the `activityStore.js` (created in Wave 3). The activity dashboard (`/my-activity`) now shows both auction and OTC activity in its feed and summary cards.
+Update `AUCTION_TYPES` enum:
+```js
+AUCTION_TYPES: {
+  FIRST_PRICE: 0,
+  VICKREY: 1,
+  DUTCH: 2,
+}
+```
 
 ---
 
@@ -104,45 +145,45 @@ Add OTC activity data to the `activityStore.js` (created in Wave 3). The activit
 
 | Feature | Privacy Impact |
 |---------|----------------|
-| Private escrow records | MakerEscrow record is encrypted — only maker sees their locked amount |
-| Front-running prevention | Deal terms not visible in mempool; taker designation prevents interception |
-| Private deal receipts | DealReceipt records are private — trade history only visible to participants |
-| No order book exposure | Unlike DEXes, deal amounts are not publicly displayed |
-| Selective counterparty | Maker can restrict deals to a specific taker address |
+| Hidden purchase timing | Observers can't see when a buyer commits to a Dutch auction — hides demand signals |
+| Private buyer identity | `transfer_private_to_public` hides buyer address, same as sealed-bid pattern |
+| No bid trail | Dutch auctions have no bid history — just a single purchase event |
+| Price floor privacy | The min_price is public (set by creator), but the buyer's decision threshold is private |
 
-**Privacy Score:** High — OTC trades are invisible to third parties. Only maker and taker see deal terms.
+**Privacy Score:** Medium-High — Dutch auctions inherently reveal the winning price (it's the current price at purchase time). But the buyer's identity remains hidden via `transfer_private_to_public`, and the timing of the purchase decision is obscured.
 
 ---
 
 ## Testing Checklist
 
-### Create Deal
-- [ ] Maker can create a deal with valid parameters
-- [ ] Credits correctly escrowed via credits.aleo/transfer_public_as_signer
-- [ ] MakerEscrow record returned to maker
-- [ ] Deal stored in on-chain `deals` mapping
-- [ ] Cannot create deal with insufficient balance
+### Dutch Auction Creation
+- [ ] Can create a Dutch auction with valid parameters (starting_price, price_decrement, min_price, duration)
+- [ ] AuctionV3 struct stored with auction_type=2 and Dutch fields populated
+- [ ] Cannot create Dutch auction with price_decrement > starting_price
+- [ ] Cannot create with starting_price < min_price
 
-### Accept Deal
-- [ ] Designated taker can accept an open deal
-- [ ] Taker's ask_amount transferred to maker via credits.aleo
-- [ ] Escrowed offer_amount transferred to taker via credits.aleo
-- [ ] Deal status updated to accepted (1)
-- [ ] Non-designated taker cannot accept (if taker != 0)
-- [ ] Cannot accept expired deal
-- [ ] Cannot accept already-accepted or cancelled deal
+### Dutch Price Calculation
+- [ ] Price decreases correctly per block
+- [ ] Price floors at min_price and doesn't go below
+- [ ] Price calculation identical on-chain (finalize) and client-side (aleoReader.js)
+- [ ] Price at block 0 = starting_price
+- [ ] Price at final block = min_price (if decrement covers the range)
 
-### Cancel Deal
-- [ ] Maker can cancel their own open deal
-- [ ] Escrowed credits returned to maker
-- [ ] Deal status updated to cancelled (2)
-- [ ] Non-maker cannot cancel (requires MakerEscrow record)
-- [ ] Cannot cancel already-accepted deal
+### Dutch Buy
+- [ ] First buyer wins at the current price
+- [ ] Private credits record accepted (transfer_private_to_public)
+- [ ] Cannot buy after auction duration expires
+- [ ] Cannot buy an already-purchased Dutch auction
+- [ ] Cannot submit a price that doesn't match the current on-chain price
+- [ ] Auctioneer receives payment immediately (atomic settlement)
+- [ ] Buyer set as winner and auction status set to settled
 
-### Edge Cases
-- [ ] Deal with taker=0 (open to anyone) works correctly
-- [ ] Expired deals cannot be accepted
-- [ ] Atomic swap: both transfers succeed or both fail
+### On-Chain Reader
+- [ ] `getAuction` correctly parses auction struct from mapping
+- [ ] `getCurrentDutchPrice` returns correct price for current block height
+- [ ] `getBlockHeight` returns real block height from RPC
+- [ ] `getBidCount` works for first-price and Vickrey auctions
+- [ ] Handles RPC errors gracefully (timeout, 404, malformed response)
 
 ---
 
@@ -150,20 +191,20 @@ Add OTC activity data to the `activityStore.js` (created in Wave 3). The activit
 
 | Metric | Target |
 |--------|--------|
-| Deal creation | Full create → accept flow working |
-| Escrow accuracy | 100% of escrowed credits properly locked and released |
-| Atomic swaps | Zero partial executions (both sides always complete) |
-| Cancel reliability | 100% of cancelled deals return full escrow |
-| Frontend integration | OTC page fully wired to on-chain transactions |
+| Dutch flow | Create → price decreases → buyer purchases at current price |
+| Price accuracy | Client-side price matches on-chain calculated price 100% of time |
+| Atomic settlement | Dutch buy is a single transaction — no reveal step needed |
+| On-chain reader | All mapping queries return correct, parsed data |
+| All 3 auction types | First-Price, Vickrey, and Dutch all functional in v3 contract |
 
 ---
 
 ## Demo Scenarios
 
-1. **Happy Path**: Maker creates deal (100 credits for 50 credits) → Taker accepts → Both receive DealReceipt → Credits swapped
-2. **Cancelled Deal**: Maker creates deal → No taker → Maker cancels → Escrow returned
-3. **Expired Deal**: Maker creates deal with short expiry → Expiry passes → Deal cannot be accepted
-4. **Open Deal**: Maker creates deal with taker=0 → Any user can accept
+1. **Dutch Auction**: Create Dutch (start: 500, decrement: 5/block, floor: 100) → After 50 blocks price is 250 → Buyer purchases at 250 → Auctioneer receives 250 immediately
+2. **Price Floor**: Create Dutch (start: 200, decrement: 10/block, floor: 50) → After 20 blocks price would be 0, but floors at 50 → Buyer purchases at 50
+3. **Expired Dutch**: Create Dutch with short duration → No buyer before expiry → Auction expires unsold
+4. **Side-by-Side**: Create one of each type (First-Price, Vickrey, Dutch) → Dashboard shows all three with appropriate UI variants
 
 ---
 
