@@ -2,7 +2,7 @@
 // Allows users to create new sealed-bid auctions
 
 import { useState } from "react";
-import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
+import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,8 +23,6 @@ import {
   formatBlockDuration,
 } from "@/lib/aleo";
 import {
-  PROGRAM_ID,
-  NETWORK,
   DEFAULT_COMMIT_DURATION,
   DEFAULT_REVEAL_DURATION,
   AUCTION_STATUS,
@@ -36,7 +34,7 @@ import { useAuctionStore } from "@/store/auctionStore";
  * Form for creating new auctions on the Aleo blockchain
  */
 export function CreateAuctionForm({ onSuccess }) {
-  const { publicKey, requestTransaction } = useWallet();
+  const { address, executeTransaction } = useWallet();
   const { addAuction, isCreating, setCreating, setError } = useAuctionStore();
 
   // Form state
@@ -54,7 +52,7 @@ export function CreateAuctionForm({ onSuccess }) {
     e.preventDefault();
 
     // Validate wallet connection
-    if (!publicKey) {
+    if (!address) {
       toast.error("Please connect your wallet first");
       return;
     }
@@ -94,7 +92,7 @@ export function CreateAuctionForm({ onSuccess }) {
       commitDuration: commitBlocks,
       revealDuration: revealBlocks,
     });
-    console.log("[Aloe] Wallet address:", publicKey);
+    console.log("[Aloe] Wallet address:", address);
 
     try {
       // Generate unique auction and item IDs
@@ -127,26 +125,20 @@ export function CreateAuctionForm({ onSuccess }) {
       toast.info("Please approve the transaction in your wallet...");
       console.log("[Aloe] Requesting wallet approval...");
 
-      // Build the full transaction request
+      // Build the transaction request using @provablehq TransactionOptions format
       const txRequest = {
-        address: publicKey,
-        chainId: NETWORK,
-        transitions: [
-          {
-            program: txInputs.programId,
-            functionName: txInputs.functionName,
-            inputs: txInputs.inputs,
-          },
-        ],
+        program: txInputs.programId,
+        function: txInputs.functionName,
+        inputs: txInputs.inputs,
         fee: txInputs.fee,
-        feePrivate: false,
+        privateFee: false,
       };
 
       console.log("[Aloe] Transaction request:", JSON.stringify(txRequest, null, 2));
 
-      // Request transaction from wallet
-      // AleoTransaction interface requires: address, chainId, transitions, fee, feePrivate
-      const txId = await requestTransaction(txRequest);
+      // Execute transaction via wallet adapter
+      const result = await executeTransaction(txRequest);
+      const txId = result?.transactionId;
 
       console.log("[Aloe] ✅ Transaction submitted successfully!");
       console.log("[Aloe] Transaction ID:", txId);
@@ -157,7 +149,7 @@ export function CreateAuctionForm({ onSuccess }) {
         id: auctionId,
         itemId: itemId,
         itemName: itemName.trim(),
-        auctioneer: publicKey,
+        auctioneer: address,
         minBid: minBidMicro,
         commitDuration: commitBlocks,
         revealDuration: revealBlocks,
@@ -297,14 +289,14 @@ export function CreateAuctionForm({ onSuccess }) {
           <Button
             type="submit"
             className="w-full"
-            disabled={isCreating || !publicKey}
+            disabled={isCreating || !address}
           >
             {isCreating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Creating Auction...
               </>
-            ) : !publicKey ? (
+            ) : !address ? (
               "Connect Wallet to Create"
             ) : (
               "Create Auction"
