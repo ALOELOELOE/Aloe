@@ -1,15 +1,15 @@
 # Aloe
-## Private Sealed-Bid Auction Platform on Aleo
+## Privacy-Preserving Auction Primitive on Aleo
 
-**Technical Specification & Implementation Roadmap**  
-**Aleo x AKINDO Privacy Buildathon 2026**  
-**Version 1.0 | January 2026**
+**Technical Specification & Implementation Roadmap**
+**Aleo x AKINDO Privacy Buildathon 2026**
+**Version 2.0 | February 2026**
 
 ---
 
 ## Executive Summary
 
-**Aloe** is a zero-knowledge sealed-bid auction platform built on Aleo that enables trustless, private auctions where bid amounts remain hidden until the reveal phase. This document provides a complete technical specification for building Aloe over the 10-wave Buildathon cycle.
+**Aloe** is a composable, privacy-preserving sealed-bid auction primitive built on Aleo. It enables trustless auctions where bid amounts remain hidden until the reveal phase. The same auction contract powers multiple use cases — NFT sales, procurement, token launches — through different frontend skins. This document provides a complete technical specification for building Aloe over the 10-wave Buildathon cycle.
 
 ## Why Aloe Wins
 
@@ -220,12 +220,13 @@ program aloe_auction_v2.aleo {
     }
 
     // Place a sealed bid (private)
-    // Transfers real credits from signer to program address (escrow)
+    // Accepts a private credits record — hides bidder address during commit phase
     async transition place_bid(
         public auction_id: field,
         bid_amount: u64,
         salt: field,
         public deposit: u64,
+        payment: credits.aleo/credits,  // Private credits record input
     ) -> (BidCommitment, Future) {
         // Deposit must cover the bid
         assert(deposit >= bid_amount);
@@ -246,8 +247,9 @@ program aloe_auction_v2.aleo {
         };
 
         // Transfer real credits from signer to program address (escrow)
-        // Uses transfer_public_as_signer because the signer (user) holds the credits
-        let transfer_future: Future = credits.aleo/transfer_public_as_signer(
+        // Use transfer_private_to_public to hide the bidder's address during commit phase
+        let transfer_future: Future = credits.aleo/transfer_private_to_public(
+            payment,
             self.address,
             deposit
         );
@@ -478,33 +480,50 @@ src/
     *   Handle no-reveal penalty (forfeit deposit)
     *   Error handling & edge cases
 
-### Waves 5-6: Token/NFT Integration (Mar 17 - Apr 14)
-**Goal:** Auction arbitrary Aleo tokens and NFTs
+### Wave 3: Vickrey (Second-Price) Auctions (Feb 17 - Mar 3)
+**Goal:** Second-price sealed-bid — winner pays 2nd highest bid
 
-*   Integrate with `token_registry.aleo`
-*   Support ARC-721 NFT standard (if available)
-*   Escrow item in contract during auction
-*   Automatic item transfer to winner
-*   Item preview in auction UI
+*   New program `aloe_auction_v3.aleo` with `auction_type` field
+*   Vickrey settlement: winner pays `second_highest_bid`
+*   AuctionTypeSelector component (First-Price vs Vickrey)
 
-### Waves 7-8: Advanced Features (Apr 14 - May 12)
-**Goal:** Reverse auctions & auction variants
+### Wave 4: Dutch Auctions + On-Chain Reader (Mar 3-17)
+**Goal:** Descending-price auctions + state reader utility
 
-*   Reverse auction mode (lowest bid wins - for procurement)
-*   Second-price (Vickrey) auction variant
-*   Reserve price with hidden minimum
-*   Auction templates for common use cases
-*   Mobile-responsive UI
+*   Dutch auction: price drops over time, first buyer wins
+*   `lib/aleoReader.js` for querying on-chain mappings via REST API
+*   DutchPriceTicker, DutchBuyButton components
 
-### Waves 9-10: Mainnet & Polish (May 12 - Jun 9)
+### Wave 5: Composability — Importable Primitive (Mar 17-31)
+**Goal:** Make Aloe importable by other Leo programs
+
+*   Refactor transitions for clean import signatures
+*   Demo wrapper: `aloe_nft_auction_v1.aleo`
+*   Integration guide documentation
+
+### Wave 6: Multi-Use-Case Frontend Skins (Mar 31 - Apr 14)
+**Goal:** Same contract, different UI presentations
+
+*   NFT Auction skin at `/nft`
+*   Procurement/RFQ skin at `/procurement`
+*   Deprecated pages redirect to `/dashboard`
+
+### Waves 7-8: Reverse + Batch + Advanced Privacy + SDK (Apr 14 - May 12)
+**Goal:** Complete all 5 auction types + JS SDK
+
+*   Reverse auction (lowest bid wins) for procurement
+*   Batch auction (uniform clearing price) for token sales
+*   Gated auctions with badge verification
+*   `aloe-sdk` npm package for developer integration
+
+### Waves 9-10: Security Audit + Mainnet (May 12 - Jun 9)
 **Goal:** Production deployment with professional UX
 
-*   Security audit of Leo contracts
+*   Security audit of 3 Leo programs
 *   Mainnet deployment
-*   Email/push notifications for phase changes
-*   Analytics dashboard for auctioneers
-*   Documentation & API for integrations
-*   ETHDenver/EthCC demo preparation
+*   Analytics dashboard
+*   SDK published to npm
+*   Bug bounty program
 
 ---
 

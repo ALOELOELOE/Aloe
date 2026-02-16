@@ -151,8 +151,8 @@ export function usePlaceBid() {
     // CRITICAL: Store salt in localStorage for reveal phase
     localStorage.setItem(`bid_salt_${auctionId}`, salt);
 
-    // place_bid now transfers real credits via credits.aleo/transfer_public_as_signer
-    // The deposit amount is escrowed on-chain in the program's public account
+    // place_bid transfers real credits via credits.aleo/transfer_private_to_public
+    // The deposit is escrowed on-chain, hiding the bidder's address
     const txId = await executeTransaction({
       program: "aloe_auction_v2.aleo",
       function: "place_bid",
