@@ -12,7 +12,7 @@ Wave 4 introduces Aloe's second core module: **OTC (Over-the-Counter) Trading**.
 
 The OTC module solves **front-running** — a critical problem in public DeFi where bots intercept trades by observing the mempool. With Aloe OTC, deal terms are only visible to the maker and designated taker.
 
-**Current State:** The OTC page (`pages/otc.js`) has a live UI with DealCard, DealList, and CreateDealForm components connected to `store/dealStore.js`. This wave adds the smart contract and wires real transactions.
+**Current State:** The OTC page (`pages/otc.js`) has a basic UI with DealCard and DealList display components connected to `store/dealStore.js`. The "New Deal" button exists but is disabled (no CreateDealForm yet). This wave adds the smart contract, creates the deal creation form, and wires all components to real transactions.
 
 ---
 
@@ -55,14 +55,14 @@ Imports `credits.aleo` for all value transfers.
 
 | Component | File Path | Change |
 |-----------|-----------|--------|
-| CreateDealForm | `components/CreateDealForm.jsx` | Wire to `aloe_otc_v1.aleo/create_deal` transaction |
-| DealCard | `components/DealCard.jsx` | Add Accept and Cancel action buttons |
+| DealCard | `components/DealCard.jsx` | Add Accept and Cancel action buttons, wire to real on-chain data |
 | DealList | `components/DealList.jsx` | Fetch real deals from on-chain mappings |
 
 ### New Components
 
 | Component | File Path | Description |
 |-----------|-----------|-------------|
+| CreateDealForm | `components/CreateDealForm.jsx` | Form for creating a new OTC deal — taker address, offer/ask amounts, expiry |
 | DealDetailDialog | `components/DealDetailDialog.jsx` | Full deal detail view with terms, status, and action buttons |
 | AcceptDealButton | `components/AcceptDealButton.jsx` | Button to accept a deal — pays ask_amount, receives offer_amount |
 | CancelDealButton | `components/CancelDealButton.jsx` | Button for maker to cancel and reclaim escrow |
