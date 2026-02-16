@@ -44,3 +44,5 @@ next-env.d.ts
 contracts/*/build/
 contracts/*/.leo/
 contracts/*/outputs/
+
+CLAUDE.md
