@@ -6,7 +6,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -103,17 +102,22 @@ const PRIVACY_PILLARS = [
 
 export default function Home() {
   const [isLoaded, setIsLoaded] = useState(false);
+  // Unmount LoadingScreen after its exit animation finishes
+  // to kill Framer Motion's global requestAnimationFrame loop
+  const [loadingDone, setLoadingDone] = useState(false);
 
   const handleLoaded = useCallback(() => {
     setIsLoaded(true);
+    // LoadingScreen waits 500ms then plays a 600ms exit — unmount after that
+    setTimeout(() => setLoadingDone(true), 1500);
   }, []);
 
   return (
     <div
       className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-black font-sans text-white`}
     >
-      {/* Loading Screen */}
-      <LoadingScreen isLoaded={isLoaded} />
+      {/* Loading Screen — unmounted after exit animation to free FM's rAF loop */}
+      {!loadingDone && <LoadingScreen isLoaded={isLoaded} />}
 
       {/* Header */}
       <header className="absolute top-0 left-0 right-0 z-50">
@@ -159,7 +163,10 @@ export default function Home() {
       {/* ============================================ */}
       {/* Hero Section - Full Screen with 3D background */}
       {/* ============================================ */}
-      <section className="relative min-h-screen flex items-center overflow-hidden">
+      <section
+        className="relative min-h-screen flex items-center overflow-hidden"
+        style={{ contain: "layout style paint" }}
+      >
         {/* 3D Scene Background */}
         <div className="absolute inset-0">
           <HeroScene onLoaded={handleLoaded} />
@@ -168,32 +175,38 @@ export default function Home() {
         {/* Hero Content */}
         <div className="relative z-10 mx-auto max-w-6xl px-4 w-full">
           <div className="max-w-2xl">
-            <motion.h1
+            <h1
               className="mb-6 text-5xl font-bold leading-tight tracking-tight md:text-6xl lg:text-7xl"
-              initial={{ opacity: 0, y: 30 }}
-              animate={isLoaded ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.2 }}
+              style={{
+                opacity: isLoaded ? 1 : 0,
+                transform: isLoaded ? "translateY(0)" : "translateY(30px)",
+                transition: "opacity 0.6s ease 0.2s, transform 0.6s ease 0.2s",
+              }}
             >
               Private Exchange
               <br />
               Protocol
-            </motion.h1>
+            </h1>
 
-            <motion.p
+            <p
               className="mb-8 text-lg text-gray-400 md:text-xl max-w-lg"
-              initial={{ opacity: 0, y: 20 }}
-              animate={isLoaded ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.35 }}
+              style={{
+                opacity: isLoaded ? 1 : 0,
+                transform: isLoaded ? "translateY(0)" : "translateY(20px)",
+                transition: "opacity 0.6s ease 0.35s, transform 0.6s ease 0.35s",
+              }}
             >
               Trade without revealing your hand. Auctions, OTC, launches — all
               protected by zero-knowledge proofs.
-            </motion.p>
+            </p>
 
-            <motion.div
+            <div
               className="flex flex-wrap gap-4"
-              initial={{ opacity: 0, y: 20 }}
-              animate={isLoaded ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.5 }}
+              style={{
+                opacity: isLoaded ? 1 : 0,
+                transform: isLoaded ? "translateY(0)" : "translateY(20px)",
+                transition: "opacity 0.6s ease 0.5s, transform 0.6s ease 0.5s",
+              }}
             >
               <Link href="/dashboard">
                 <Button
@@ -213,7 +226,7 @@ export default function Home() {
                   Explore Modules
                 </Button>
               </Link>
-            </motion.div>
+            </div>
           </div>
         </div>
       </section>
@@ -221,15 +234,13 @@ export default function Home() {
       {/* ============================================ */}
       {/* Modules Section - Cards grid */}
       {/* ============================================ */}
-      <section id="modules" className="relative z-10 bg-black py-24">
+      <section
+        id="modules"
+        className="relative z-10 bg-black py-24"
+        style={{ contentVisibility: "auto", containIntrinsicSize: "0 600px" }}
+      >
         <div className="mx-auto max-w-6xl px-4">
-          <motion.div
-            className="mb-12 text-center"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-          >
+          <div className="mb-12 text-center">
             <h2 className="text-3xl font-bold md:text-4xl">
               Exchange Modules
             </h2>
@@ -237,7 +248,7 @@ export default function Home() {
               Every trade type has a privacy problem. Aloe solves each one with
               purpose-built ZK circuits on Aleo.
             </p>
-          </motion.div>
+          </div>
 
           {/* Module Cards Grid */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -247,15 +258,9 @@ export default function Home() {
               const isLive = mod?.status === "live";
 
               return (
-                <motion.div
-                  key={card.key}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.4, delay: index * 0.1 }}
-                >
+                <div key={card.key}>
                   <Link href={mod?.path || "#"}>
-                    <Card className="group h-full border-gray-800 bg-gray-950 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-200 cursor-pointer">
+                    <Card className="group h-full border-gray-800 bg-gray-950 hover:border-emerald-500/50 transition-colors duration-200 cursor-pointer">
                       <CardContent className="p-6">
                         {/* Icon + Status */}
                         <div className="flex items-start justify-between mb-4">
@@ -289,7 +294,7 @@ export default function Home() {
                       </CardContent>
                     </Card>
                   </Link>
-                </motion.div>
+                </div>
               );
             })}
           </div>
@@ -299,15 +304,13 @@ export default function Home() {
       {/* ============================================ */}
       {/* Why Privacy Section - 3 columns */}
       {/* ============================================ */}
-      <section id="privacy" className="relative z-10 bg-gray-950 py-24">
+      <section
+        id="privacy"
+        className="relative z-10 bg-gray-950 py-24"
+        style={{ contentVisibility: "auto", containIntrinsicSize: "0 500px" }}
+      >
         <div className="mx-auto max-w-6xl px-4">
-          <motion.div
-            className="mb-12 text-center"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-          >
+          <div className="mb-12 text-center">
             <h2 className="text-3xl font-bold md:text-4xl">
               Why Privacy Matters
             </h2>
@@ -315,21 +318,14 @@ export default function Home() {
               Public blockchains expose everything. Aloe uses Aleo&apos;s
               zero-knowledge proofs to keep your trading activity private.
             </p>
-          </motion.div>
+          </div>
 
           {/* Privacy Pillars */}
           <div className="grid gap-8 md:grid-cols-3">
-            {PRIVACY_PILLARS.map((pillar, index) => {
+            {PRIVACY_PILLARS.map((pillar) => {
               const Icon = pillar.icon;
               return (
-                <motion.div
-                  key={pillar.title}
-                  className="text-center"
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.4, delay: index * 0.15 }}
-                >
+                <div key={pillar.title} className="text-center">
                   <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
                     <Icon className="h-7 w-7" />
                   </div>
@@ -337,7 +333,7 @@ export default function Home() {
                     {pillar.title}
                   </h3>
                   <p className="text-sm text-gray-400">{pillar.description}</p>
-                </motion.div>
+                </div>
               );
             })}
           </div>

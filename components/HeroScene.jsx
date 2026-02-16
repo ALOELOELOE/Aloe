@@ -1,7 +1,7 @@
 // Aloe - Hero 3D Scene (High Quality)
 // Main crystal with orbiting elements on rings
 
-import { useRef, useMemo, useEffect } from "react";
+import { useRef, useMemo, useEffect, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Environment, MeshTransmissionMaterial, useProgress, Preload } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
@@ -264,6 +264,18 @@ function OrbitController({ angleRef, speed = 0.4 }) {
   return null;
 }
 
+// Controls whether the Canvas renders frames.
+// When visible=false, no invalidate() is called, so the GPU does zero work.
+function RenderController({ visible }) {
+  const { invalidate } = useThree();
+
+  useFrame(() => {
+    if (visible) invalidate();
+  });
+
+  return null;
+}
+
 // Main scene
 function Scene({ onLoaded }) {
   // Shared angle ref for synchronized orbits
@@ -321,12 +333,40 @@ function Scene({ onLoaded }) {
 }
 
 // Exported component
+// Uses Intersection Observer to pause rendering when scrolled off-screen,
+// eliminating expensive FBO passes from MeshTransmissionMaterial while hidden.
 export function HeroScene({ onLoaded }) {
+  const containerRef = useRef(null);
+  const [visible, setVisible] = useState(true);
+
+  // Track whether the hero container is in the viewport
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setVisible(entry.isIntersecting),
+      { threshold: 0 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="absolute inset-0 z-0">
+    <div
+      ref={containerRef}
+      className="absolute inset-0 z-0"
+      style={{
+        contain: "strict",
+        willChange: visible ? "transform" : "auto",
+        visibility: visible ? "visible" : "hidden",
+        // Prevent hit-testing on hidden canvas
+        pointerEvents: visible ? "auto" : "none",
+      }}
+    >
       <Canvas
+        frameloop="demand"
         camera={{ position: [0, 0, 8], fov: 45 }}
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
         gl={{
           antialias: true,
           alpha: true,
@@ -335,6 +375,7 @@ export function HeroScene({ onLoaded }) {
         }}
         style={{ background: "transparent" }}
       >
+        <RenderController visible={visible} />
         <Scene onLoaded={onLoaded} />
       </Canvas>
     </div>
