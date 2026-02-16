@@ -1,5 +1,5 @@
 // Aloe - Landing Page
-// Marketing hero page with 3D visuals, module showcase, and privacy value props
+// Marketing hero page with 3D visuals, auction use-case showcase, and privacy value props
 
 import { useState, useCallback } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -13,15 +13,12 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import {
   ArrowRight,
   Gavel,
-  ArrowLeftRight,
-  Rocket,
   ImageIcon,
-  Building2,
+  Briefcase,
   ShieldCheck,
   EyeOff,
   Scale,
 } from "lucide-react";
-import { MODULES } from "@/lib/constants";
 
 // Dynamically import the 3D scene to avoid SSR issues
 const HeroScene = dynamic(
@@ -39,42 +36,31 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Module card data — icon, description, and privacy value for each module
-const MODULE_CARDS = [
+// Use-case cards — same auction primitive, different applications
+const USE_CASE_CARDS = [
   {
-    key: "AUCTIONS",
     icon: Gavel,
     title: "Sealed-Bid Auctions",
-    description: "Bid without revealing your hand. ZK-committed bids prevent sniping.",
-    privacy: "Eliminates bid sniping & information leakage",
+    description: "Bid without revealing your hand. ZK-committed bids prevent sniping and information leakage.",
+    privacy: "Eliminates bid sniping & front-running",
+    href: "/dashboard",
+    status: "live",
   },
   {
-    key: "OTC",
-    icon: ArrowLeftRight,
-    title: "OTC Trading",
-    description: "Private peer-to-peer trades with atomic escrow settlement.",
-    privacy: "Prevents front-running & order flow exposure",
-  },
-  {
-    key: "LAUNCHES",
-    icon: Rocket,
-    title: "Token Launches",
-    description: "Fair token distribution with hidden allocation sizes.",
-    privacy: "Stops whale sniping & unfair allocation",
-  },
-  {
-    key: "NFT",
     icon: ImageIcon,
-    title: "NFT Marketplace",
-    description: "Trade NFTs without exposing your portfolio or bid history.",
+    title: "NFT Auctions",
+    description: "Private NFT sales with sealed bids. Collectors bid without exposing portfolio or bid history.",
     privacy: "Protects portfolio exposure & bid tracking",
+    href: "/nft",
+    status: "coming_soon",
   },
   {
-    key: "RWA",
-    icon: Building2,
-    title: "RWA Exchange",
-    description: "Private ownership transfer for real-world assets.",
-    privacy: "Secures valuation privacy & ownership data",
+    icon: Briefcase,
+    title: "Procurement / RFQ",
+    description: "Reverse auctions for sourcing. Suppliers submit sealed quotes — lowest wins.",
+    privacy: "Prevents price collusion & bid-rigging",
+    href: "/procurement",
+    status: "coming_soon",
   },
 ];
 
@@ -84,13 +70,13 @@ const PRIVACY_PILLARS = [
     icon: ShieldCheck,
     title: "No Front-Running",
     description:
-      "Your orders are hidden until execution. No one can see your trades and race ahead.",
+      "Your bids are hidden until the reveal phase. No one can see your bid and outbid you by $1.",
   },
   {
     icon: EyeOff,
     title: "No Information Leakage",
     description:
-      "Trade size, intent, and strategy stay private. Only you know your position.",
+      "Bid amounts, bidder identity, and strategy stay private. Only you know your position.",
   },
   {
     icon: Scale,
@@ -136,10 +122,10 @@ export default function Home() {
           {/* Nav Links + Launch App */}
           <nav className="flex items-center gap-4">
             <Link
-              href="#modules"
+              href="#use-cases"
               className="hidden sm:block text-sm text-gray-400 hover:text-white transition-colors"
             >
-              Modules
+              Use Cases
             </Link>
             <Link
               href="#privacy"
@@ -183,9 +169,9 @@ export default function Home() {
                 transition: "opacity 0.6s ease 0.2s, transform 0.6s ease 0.2s",
               }}
             >
-              Private Exchange
+              Privacy-Preserving
               <br />
-              Protocol
+              Auction Primitive
             </h1>
 
             <p
@@ -196,8 +182,9 @@ export default function Home() {
                 transition: "opacity 0.6s ease 0.35s, transform 0.6s ease 0.35s",
               }}
             >
-              Trade without revealing your hand. Auctions, OTC, launches — all
-              protected by zero-knowledge proofs.
+              A composable sealed-bid auction protocol on Aleo. One primitive
+              powers NFT sales, procurement, token launches — all protected by
+              zero-knowledge proofs.
             </p>
 
             <div
@@ -217,13 +204,13 @@ export default function Home() {
                   <ArrowRight className="h-5 w-5" />
                 </Button>
               </Link>
-              <Link href="#modules">
+              <Link href="#use-cases">
                 <Button
                   size="lg"
                   variant="outline"
                   className="px-8 py-6 text-base border-gray-700 text-white hover:bg-white/10"
                 >
-                  Explore Modules
+                  Explore Use Cases
                 </Button>
               </Link>
             </div>
@@ -232,34 +219,33 @@ export default function Home() {
       </section>
 
       {/* ============================================ */}
-      {/* Modules Section - Cards grid */}
+      {/* Use Cases Section — same primitive, different applications */}
       {/* ============================================ */}
       <section
-        id="modules"
+        id="use-cases"
         className="relative z-10 bg-black py-24"
         style={{ contentVisibility: "auto", containIntrinsicSize: "0 600px" }}
       >
         <div className="mx-auto max-w-6xl px-4">
           <div className="mb-12 text-center">
             <h2 className="text-3xl font-bold md:text-4xl">
-              Exchange Modules
+              One Primitive, Many Applications
             </h2>
             <p className="mt-3 text-gray-400 max-w-2xl mx-auto">
-              Every trade type has a privacy problem. Aloe solves each one with
-              purpose-built ZK circuits on Aleo.
+              The same composable auction contract powers every use case.
+              Different frontends, same privacy guarantees.
             </p>
           </div>
 
-          {/* Module Cards Grid */}
+          {/* Use Case Cards Grid */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {MODULE_CARDS.map((card, index) => {
-              const mod = MODULES[card.key];
+            {USE_CASE_CARDS.map((card) => {
               const Icon = card.icon;
-              const isLive = mod?.status === "live";
+              const isLive = card.status === "live";
 
               return (
-                <div key={card.key}>
-                  <Link href={mod?.path || "#"}>
+                <div key={card.title}>
+                  <Link href={card.href}>
                     <Card className="group h-full border-gray-800 bg-gray-950 hover:border-emerald-500/50 transition-colors duration-200 cursor-pointer">
                       <CardContent className="p-6">
                         {/* Icon + Status */}
@@ -316,7 +302,7 @@ export default function Home() {
             </h2>
             <p className="mt-3 text-gray-400 max-w-2xl mx-auto">
               Public blockchains expose everything. Aloe uses Aleo&apos;s
-              zero-knowledge proofs to keep your trading activity private.
+              zero-knowledge proofs to keep your auction activity private.
             </p>
           </div>
 
@@ -353,7 +339,7 @@ export default function Home() {
                 height={24}
               />
               <span className="text-sm font-medium text-gray-400">
-                Aloe — Private Exchange Protocol
+                Aloe — Privacy-Preserving Auction Primitive
               </span>
             </div>
 
