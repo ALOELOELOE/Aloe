@@ -1,5 +1,6 @@
-// Aloe - NFT Marketplace (Coming Soon)
-// Trade NFTs without exposing portfolio or bid history
+// Aloe - NFT Auctions (Coming Soon — Wave 6)
+// NFT auction skin using the same aloe_auction_v3.aleo contract
+// Different UI presentation, same sealed-bid privacy guarantees
 
 import { Geist, Geist_Mono } from "next/font/google";
 import { motion } from "framer-motion";
@@ -17,7 +18,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export default function NFTMarketplace() {
+export default function NFTAuctions() {
   return (
     <div
       className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-background font-sans`}
@@ -38,7 +39,7 @@ export default function NFTMarketplace() {
 
           {/* Title + Badge */}
           <div className="mb-4 flex items-center justify-center gap-3">
-            <h1 className="text-3xl font-bold">NFT Marketplace</h1>
+            <h1 className="text-3xl font-bold">NFT Auctions</h1>
             <Badge variant="outline" className="text-sm">
               Coming Soon
             </Badge>
@@ -46,9 +47,9 @@ export default function NFTMarketplace() {
 
           {/* Description */}
           <p className="mb-8 text-muted-foreground">
-            Trade NFTs without exposing your portfolio or bid history. Private
-            listings, sealed bids, and anonymous ownership transfers — all
-            verified by zero-knowledge proofs on Aleo.
+            Private NFT sales powered by the same sealed-bid auction primitive.
+            Collectors bid without exposing their portfolio or bid history —
+            all verified by zero-knowledge proofs on Aleo.
           </p>
 
           {/* Privacy Value Card */}
@@ -60,15 +61,15 @@ export default function NFTMarketplace() {
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
                 <span className="text-emerald-500">•</span>
+                <span>Same sealed-bid guarantees — bids hidden until reveal phase</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-500">•</span>
                 <span>Portfolio holdings stay private — no one can track your NFT collection</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-emerald-500">•</span>
-                <span>Bid history is hidden — no bid tracking or strategic manipulation</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-emerald-500">•</span>
-                <span>Ownership transfers are anonymous — buy and sell without exposure</span>
+                <span>One composable contract — NFT auctions are a skin on aloe_auction_v3.aleo</span>
               </li>
             </ul>
           </div>
