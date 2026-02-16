@@ -29,8 +29,8 @@ Wave 1 establishes the core foundation of Aloe, a privacy-first sealed-bid aucti
 ### Program Details
 | Property | Value |
 |----------|-------|
-| **Program ID** | `zkauction.aleo` |
-| **Network** | Aleo Testnet Beta |
+| **Program ID** | `aloe_auction_v2.aleo` |
+| **Network** | Aleo Testnet |
 | **Version** | 0.1.0 |
 | **License** | MIT |
 
@@ -56,7 +56,7 @@ Wave 1 establishes the core foundation of Aloe, a privacy-first sealed-bid aucti
 ### Core Components
 | Component | Description |
 |-----------|-------------|
-| `WalletConnect.jsx` | Leo Wallet integration with connection management |
+| `WalletConnect.jsx` | Leo + Shield Wallet integration with connection management |
 | `CreateAuctionForm.jsx` | Form for creating new auctions with validation |
 | `AuctionCard.jsx` | Card display for individual auction preview |
 | `AuctionList.jsx` | List view of available auctions |
@@ -92,9 +92,9 @@ Wave 1 establishes the core foundation of Aloe, a privacy-first sealed-bid aucti
 ## Testing Instructions
 
 ### Prerequisites
-1. Install Leo Wallet browser extension
+1. Install Leo Wallet (or Shield Wallet) browser extension
 2. Create/import a wallet with testnet credits
-3. Connect to Aleo Testnet Beta
+3. Connect to Aleo Testnet
 
 ### Test Create Auction
 1. Connect your wallet on the home page
@@ -104,7 +104,7 @@ Wave 1 establishes the core foundation of Aloe, a privacy-first sealed-bid aucti
    - Minimum bid (in credits)
    - Commit duration (in blocks)
    - Reveal duration (in blocks)
-4. Submit and approve the transaction in Leo Wallet
+4. Submit and approve the transaction in your wallet
 5. Wait for transaction confirmation
 
 ### Test Place Bid
@@ -113,6 +113,28 @@ Wave 1 establishes the core foundation of Aloe, a privacy-first sealed-bid aucti
 3. Enter your bid amount and deposit
 4. Submit and approve the transaction
 5. Your private BidCommitment record is stored in your wallet
+
+---
+
+## Post-Wave 1 Additions
+
+The following enhancements were added after the initial Wave 1 submission to meet buildathon requirements:
+
+### Shield Wallet Integration
+- Migrated wallet adapter stack from `@demox-labs` to `@provablehq` packages
+- Added `ShieldWalletAdapter` from `@provablehq/aleo-wallet-adaptor-shield`
+- Both Leo Wallet and Shield Wallet are now supported
+
+### credits.aleo Integration (Real Escrow)
+- `place_bid` now calls `credits.aleo/transfer_public_as_signer` to transfer real credits
+- Bidder deposits are locked in the program's on-chain public account (escrow)
+- Credit transfer is atomic with bid placement via `Future.await()`
+- This addresses the buildathon requirement for actual on-chain value transfer
+
+### Contract Redeployment
+- Program renamed from `zkauction.aleo` → `aloe_auction_v2.aleo`
+- Redeployed to Aleo Testnet
+- **Deployment TX:** `at14gxf5urs5dy53llj8vz8f3j7ay4qkdustpea7vy7yn43fxxrmcxqwa0j6t`
 
 ---
 

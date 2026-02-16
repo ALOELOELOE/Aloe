@@ -58,7 +58,7 @@ Aloe uses Aleo's zero-knowledge architecture to implement cryptographically seal
  │         ▼                   ▼                   ▼               │
  │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐       │
  │  │    React    │     │ Leo Wallet  │     │     Aloe    │       │
- │  │    State    │     │   Puzzle    │     │   Program   │       │
+ │  │    State    │     │   Shield    │     │   Program   │       │
  │  └─────────────┘     └─────────────┘     └─────────────┘       │
  └─────────────────────────────────────────────────────────────────┘
 ```
@@ -129,7 +129,10 @@ mapping commitments: field => bool;        // commitment_hash => exists
 ### Leo Program Structure
 
 ```leo
-program zkauction.aleo {
+// Import credits.aleo for real credit transfers (escrow deposits)
+import credits.aleo;
+
+program aloe_auction_v2.aleo {
 
     // ========== RECORDS ==========
     record BidCommitment {
@@ -157,6 +160,14 @@ program zkauction.aleo {
     mapping highest_bid: field => u64;
     mapping highest_bidder: field => address;
     mapping commitments: field => bool;
+    mapping auction_deposits: field => u64;
+
+    // ========== STRUCTS (helpers) ==========
+    struct CommitmentData {
+        bid_amount: u64,
+        salt: field,
+        auction_id: field,
+    }
 
     // ========== TRANSITIONS ==========
     
@@ -209,46 +220,66 @@ program zkauction.aleo {
     }
 
     // Place a sealed bid (private)
+    // Transfers real credits from signer to program address (escrow)
     async transition place_bid(
         public auction_id: field,
-        private bid_amount: u64,
-        private salt: field,
+        bid_amount: u64,
+        salt: field,
         public deposit: u64,
     ) -> (BidCommitment, Future) {
+        // Deposit must cover the bid
+        assert(deposit >= bid_amount);
+
         // Commitment = hash(bid_amount || salt || auction_id)
         let commitment: field = BHP256::hash_to_field(
-            (bid_amount, salt, auction_id)
+            CommitmentData { bid_amount, salt, auction_id }
         );
-        
+
         // Create private record for bidder
         let bid_record: BidCommitment = BidCommitment {
             owner: self.caller,
             auction_id: auction_id,
             commitment: commitment,
+            bid_amount: bid_amount,
+            salt: salt,
             deposit: deposit,
         };
-        
-        return (bid_record, finalize_place_bid(auction_id, commitment, deposit));
+
+        // Transfer real credits from signer to program address (escrow)
+        // Uses transfer_public_as_signer because the signer (user) holds the credits
+        let transfer_future: Future = credits.aleo/transfer_public_as_signer(
+            self.address,
+            deposit
+        );
+
+        return (bid_record, finalize_place_bid(auction_id, commitment, deposit, transfer_future));
     }
 
     async function finalize_place_bid(
         auction_id: field,
         commitment: field,
         deposit: u64,
+        transfer_future: Future,   // Future from credits.aleo transfer
     ) {
+        // Finalize the credit transfer first (atomic with bid placement)
+        transfer_future.await();
+
         // Get auction and verify it's in commit phase
         let auction: Auction = Mapping::get(auctions, auction_id);
-        assert(auction.status == 0u8);
+        assert_eq(auction.status, 1u8);
         assert(block.height <= auction.commit_deadline);
-        assert(deposit >= auction.min_bid);
-        
+
         // Ensure commitment is unique
         assert(!Mapping::contains(commitments, commitment));
         Mapping::set(commitments, commitment, true);
-        
+
         // Increment bid count
-        let count: u32 = Mapping::get(bid_count, auction_id);
-        Mapping::set(bid_count, auction_id, count + 1u32);
+        let count: u64 = Mapping::get(bid_count, auction_id);
+        Mapping::set(bid_count, auction_id, count + 1u64);
+
+        // Track total deposits
+        let current_deposits: u64 = Mapping::get(auction_deposits, auction_id);
+        Mapping::set(auction_deposits, auction_id, current_deposits + deposit);
     }
 
     // Reveal bid (consumes BidCommitment record)
@@ -351,7 +382,7 @@ program zkauction.aleo {
 | **Framework** | Next.js 14 (App Router) |
 | **Styling** | TailwindCSS + shadcn/ui |
 | **State** | Zustand (lightweight, no boilerplate) |
-| **Wallet** | aleo-adapters (Leo, Puzzle, Fox support) |
+| **Wallet** | @provablehq wallet adapters (Leo, Shield support) |
 | **Aleo SDK** | @provablehq/sdk for proof generation |
 
 ### Key Components
@@ -386,7 +417,7 @@ src/
 ## User Flows
 
 ### Flow 1: Create Auction
-1. Auctioneer connects wallet (Leo/Puzzle)
+1. Auctioneer connects wallet (Leo/Shield)
 2. Fills form: item description, minimum bid, commit duration, reveal duration
 3. Signs transaction → `create_auction` transition executes
 4. Auction appears in public list with countdown timer
@@ -520,7 +551,7 @@ git clone https://github.com/mikenike360/aleo-starter-template
 *   **Aleo Developer Docs:** [developer.aleo.org](https://developer.aleo.org)
 *   **Leo Language Docs:** [leo-lang.org](https://leo-lang.org)
 *   **Leo Playground:** [play.leo-lang.org](https://play.leo-lang.org)
-*   **Wallet Adapter:** [github.com/demox-labs/aleo-wallet-adapter](https://github.com/demox-labs/aleo-wallet-adapter)
+*   **Wallet Adapter:** [github.com/ProvableHQ/aleo-wallet-adapter](https://github.com/ProvableHQ/aleo-wallet-adapter)
 *   **Awesome Aleo:** [github.com/howardwu/awesome-aleo](https://github.com/howardwu/awesome-aleo)
 *   **Buildathon Discord:** [t.me/akindo_io/5725](https://t.me/akindo_io/5725)
 

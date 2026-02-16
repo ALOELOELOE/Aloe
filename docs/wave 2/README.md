@@ -14,13 +14,17 @@ Wave 2 completes the core auction lifecycle by implementing the reveal phase, au
 
 ## Smart Contract
 
+### credits.aleo Impact
+
+> **Important:** As of Wave 1 post-updates, `place_bid` now transfers real credits into escrow via `credits.aleo/transfer_public_as_signer`. This means Wave 2's `claim_refund` and `settle_auction` transitions must handle **actual credit transfers** back to users — not just mapping updates. `claim_refund` should call `credits.aleo/transfer_public` to return deposits to losing bidders, and `settle_auction` should transfer the winning bid to the auctioneer.
+
 ### New Transitions
 
 | Transition | Visibility | Description |
 |------------|------------|-------------|
 | `reveal_bid` | Private → Public | Bidder reveals bid amount and salt, contract verifies commitment hash |
-| `settle_auction` | Public | Determines winner based on highest revealed bid, updates auction status |
-| `claim_refund` | Private | Non-winning bidders reclaim their deposits |
+| `settle_auction` | Public | Determines winner, transfers winning bid to auctioneer via `credits.aleo` |
+| `claim_refund` | Private | Non-winners reclaim their deposits via `credits.aleo` transfer |
 | `cancel_auction` | Public | Auctioneer cancels auction if no bids received |
 
 ### New Mappings

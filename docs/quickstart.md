@@ -85,10 +85,12 @@ npx create-next-app@latest zkauction-frontend --typescript --tailwind
 cd zkauction-frontend
 
 npm install \
-  @demox-labs/aleo-wallet-adapter-base \
-  @demox-labs/aleo-wallet-adapter-react \
-  @demox-labs/aleo-wallet-adapter-reactui \
-  aleo-adapters \
+  @provablehq/aleo-wallet-adaptor-core \
+  @provablehq/aleo-wallet-adaptor-react \
+  @provablehq/aleo-wallet-adaptor-react-ui \
+  @provablehq/aleo-wallet-adaptor-leo \
+  @provablehq/aleo-wallet-adaptor-shield \
+  @provablehq/aleo-types \
   zustand
 ```
 
@@ -97,28 +99,33 @@ npm install \
 ```tsx
 "use client";
 
-import { WalletProvider, WalletModalProvider } from "@demox-labs/aleo-wallet-adapter-react";
-import { WalletAdapterNetwork, DecryptPermission } from "@demox-labs/aleo-wallet-adapter-base";
-import { LeoWalletAdapter, PuzzleWalletAdapter } from "aleo-adapters";
 import { useMemo } from "react";
+import { AleoWalletProvider } from "@provablehq/aleo-wallet-adaptor-react";
+import { WalletModalProvider } from "@provablehq/aleo-wallet-adaptor-react-ui";
+import { LeoWalletAdapter } from "@provablehq/aleo-wallet-adaptor-leo";
+import { ShieldWalletAdapter } from "@provablehq/aleo-wallet-adaptor-shield";
+import { DecryptPermission } from "@provablehq/aleo-wallet-adaptor-core";
+import { Network } from "@provablehq/aleo-types";
+import "@provablehq/aleo-wallet-adaptor-react-ui/dist/styles.css";
 
-export function AleoWalletProvider({ children }: { children: React.ReactNode }) {
+export function WalletProvider({ children }: { children: React.ReactNode }) {
+  // Shield Wallet is required for the buildathon
   const wallets = useMemo(() => [
-    new LeoWalletAdapter({ appName: "zkAuction" }),
-    new PuzzleWalletAdapter({ appName: "zkAuction" }),
+    new LeoWalletAdapter({ appName: "Aloe Auctions" }),
+    new ShieldWalletAdapter({ appName: "Aloe Auctions" }),
   ], []);
 
   return (
-    <WalletProvider
+    <AleoWalletProvider
       wallets={wallets}
       decryptPermission={DecryptPermission.UponRequest}
-      network={WalletAdapterNetwork.TestnetBeta}
+      network={Network.TESTNET}
       autoConnect
     >
       <WalletModalProvider>
         {children}
       </WalletModalProvider>
-    </WalletProvider>
+    </AleoWalletProvider>
   );
 }
 ```
@@ -126,40 +133,38 @@ export function AleoWalletProvider({ children }: { children: React.ReactNode }) 
 ### Place Bid Hook (src/hooks/usePlaceBid.ts)
 
 ```tsx
-import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
-import { Transaction, WalletAdapterNetwork } from "@demox-labs/aleo-wallet-adapter-base";
+import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
 
 export function usePlaceBid() {
-  const { publicKey, requestTransaction } = useWallet();
+  const { address, executeTransaction } = useWallet();
 
   const placeBid = async (
     auctionId: string,
     bidAmount: number,
     deposit: number
   ) => {
-    if (!publicKey) throw new Error("Wallet not connected");
+    if (!address) throw new Error("Wallet not connected");
 
     // Generate random salt
     const salt = Math.floor(Math.random() * 1000000000).toString() + "field";
-    
+
     // CRITICAL: Store salt in localStorage for reveal phase
     localStorage.setItem(`bid_salt_${auctionId}`, salt);
 
-    const transaction = Transaction.createTransaction(
-      publicKey,
-      WalletAdapterNetwork.TestnetBeta,
-      "zkauction.aleo",
-      "place_bid",
-      [
+    // place_bid now transfers real credits via credits.aleo/transfer_public_as_signer
+    // The deposit amount is escrowed on-chain in the program's public account
+    const txId = await executeTransaction({
+      program: "aloe_auction_v2.aleo",
+      function: "place_bid",
+      inputs: [
         auctionId + "field",           // auction_id (public)
         bidAmount.toString() + "u64",   // bid_amount (private)
         salt,                           // salt (private)
         deposit.toString() + "u64",     // deposit (public)
       ],
-      deposit * 1000000,                // fee in microcredits
-    );
+      fee: deposit * 1000000,           // fee in microcredits
+    });
 
-    const txId = await requestTransaction(transaction);
     return { txId, salt };
   };
 
@@ -179,7 +184,7 @@ export function usePlaceBid() {
   - [ ] Deployed to testnet
 
 - [ ] **Frontend**
-  - [ ] Wallet connection (Leo or Puzzle)
+  - [ ] Wallet connection (Leo or Shield)
   - [ ] Create auction form
   - [ ] Basic auction list
 
@@ -231,7 +236,7 @@ https://github.com/[username]/zkauction
 | Leo Docs | https://leo-lang.org |
 | Leo Playground | https://play.leo-lang.org |
 | Aleo Developer Docs | https://developer.aleo.org |
-| Wallet Adapter | https://github.com/demox-labs/aleo-wallet-adapter |
+| Wallet Adapter | https://github.com/ProvableHQ/aleo-wallet-adapter |
 | Awesome Aleo | https://github.com/howardwu/awesome-aleo |
 | Testnet Faucet | https://faucet.aleo.org |
 | Buildathon Discord | https://t.me/akindo_io/5725 |

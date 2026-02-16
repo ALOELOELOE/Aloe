@@ -4,7 +4,7 @@
 **Status:** 🚧 Alpha / Active Development  
 **Hackathon:** Aleo x AKINDO Privacy Buildathon 2026
 
-![Aleo](https://img.shields.io/badge/Aleo-Zero%20Knowledge-blue) ![Next.js](https://img.shields.io/badge/Next.js-14-black) ![License](https://img.shields.io/badge/License-MIT-green)
+![Aleo](https://img.shields.io/badge/Aleo-Zero%20Knowledge-blue) ![Next.js](https://img.shields.io/badge/Next.js-16-black) ![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
@@ -43,7 +43,7 @@ Aloe is a hybrid dApp combining a Leo-based smart contract with a modern Next.js
  ├─────────────────────────────────────────────────────────────────┤
  │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐       │
  │  │   Next.js   │────▶│ Wallet App  │────▶│    Aleo     │       │
- │  │  Frontend   │     │ (Leo/Puzzle)│     │   Network   │       │
+ │  │  Frontend   │     │(Leo/Shield) │     │   Network   │       │
  │  └─────────────┘     └─────────────┘     └─────────────┘       │
  │         │                   │                   │               │
  │         ▼                   ▼                   ▼               │
@@ -58,7 +58,7 @@ Aloe is a hybrid dApp combining a Leo-based smart contract with a modern Next.js
 - **Smart Contract:** [Leo Language](https://leo-lang.org/)
 - **Frontend:** Next.js 14, React, TailwindCSS, shadcn/ui
 - **State Management:** Zustand
-- **Wallets:** Leo Wallet, Puzzle Wallet
+- **Wallets:** Leo Wallet, Shield Wallet
 - **ZK Generation:** @provablehq/sdk
 
 ---
@@ -66,7 +66,7 @@ Aloe is a hybrid dApp combining a Leo-based smart contract with a modern Next.js
 ## 🚀 Getting Started
 
 ### Prerequisites
-1.  **Aleo Wallet:** Install [Leo Wallet](https://www.leo.app/) or [Puzzle Wallet](https://puzzle.online/).
+1.  **Aleo Wallet:** Install [Leo Wallet](https://www.leo.app/) or Shield Wallet (required for buildathon).
 2.  **Node.js:** v18 or later.
 3.  **Rust/Cargo:** Required for installing Leo CLI (optional if just running frontend).
 
@@ -92,6 +92,21 @@ Aloe is a hybrid dApp combining a Leo-based smart contract with a modern Next.js
 
 4.  **Open the app:**
     Navigate to [http://localhost:3000](http://localhost:3000)
+
+---
+
+## 🔐 Buildathon Requirements
+
+### Shield Wallet Integration
+Aloe supports **Shield Wallet** via `@provablehq/aleo-wallet-adaptor-shield`, fulfilling the buildathon's wallet integration requirement. The wallet adapter stack has been migrated from `@demox-labs` to `@provablehq` to enable Shield support.
+
+### credits.aleo Escrow
+The `place_bid` transition integrates with Aleo's native `credits.aleo` program to transfer **real credits** into escrow. When a bidder places a bid, their deposit is transferred to the program's on-chain address via `credits.aleo/transfer_public_as_signer`, locking funds until the auction settles.
+
+### Deployed Program
+- **Program ID:** `aloe_auction_v2.aleo`
+- **Network:** Aleo Testnet
+- **Deployment TX:** `at14gxf5urs5dy53llj8vz8f3j7ay4qkdustpea7vy7yn43fxxrmcxqwa0j6t`
 
 ---
 
