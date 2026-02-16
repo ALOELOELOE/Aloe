@@ -1,6 +1,9 @@
 // Aloe: Privacy-first sealed-bid auction platform
 // Wave 1: Core auction creation and bid placement with commit-reveal scheme
 
+// Import credits.aleo for real credit transfers (escrow deposits)
+import credits.aleo;
+
 program zkauction.aleo {
 
     // ============================================
@@ -127,6 +130,7 @@ program zkauction.aleo {
 
     // Place a sealed bid on an auction
     // Creates a private BidCommitment record for the bidder
+    // Transfers real credits from signer to program address (escrow)
     async transition place_bid(
         public auction_id: field,         // Auction to bid on
         bid_amount: u64,                  // Private bid amount
@@ -156,8 +160,16 @@ program zkauction.aleo {
             deposit: deposit,
         };
 
+        // Transfer real credits from signer to program address (escrow)
+        // Uses transfer_public_as_signer because the signer (user) holds the credits
+        // self.address is the program's on-chain address, acting as escrow
+        let transfer_future: Future = credits.aleo/transfer_public_as_signer(
+            self.address,
+            deposit
+        );
+
         // Return the record and future to finalize
-        return (bid_record, finalize_place_bid(auction_id, commitment, deposit));
+        return (bid_record, finalize_place_bid(auction_id, commitment, deposit, transfer_future));
     }
 
     // Helper struct for commitment hashing
@@ -168,11 +180,16 @@ program zkauction.aleo {
     }
 
     // Finalize bid placement - updates on-chain state
+    // Awaits the credit transfer future to ensure atomic execution
     async function finalize_place_bid(
         auction_id: field,
         commitment: field,
-        deposit: u64
+        deposit: u64,
+        transfer_future: Future   // Future from credits.aleo transfer
     ) {
+        // Finalize the credit transfer first (atomic with bid placement)
+        transfer_future.await();
+
         // Get auction and verify it exists
         let auction: Auction = Mapping::get(auctions, auction_id);
 

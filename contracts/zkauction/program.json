@@ -3,5 +3,11 @@
   "version": "0.1.0",
   "description": "Privacy-first sealed-bid auction platform using commit-reveal scheme with ZK proofs",
   "license": "MIT",
-  "dependencies": null
+  "dependencies": [
+    {
+      "name": "credits.aleo",
+      "location": "network",
+      "network": "testnet"
+    }
+  ]
 }
