@@ -4,7 +4,7 @@
 // Import credits.aleo for real credit transfers (escrow deposits)
 import credits.aleo;
 
-program zkauction.aleo {
+program aloe_auction_v2.aleo {
 
     // ============================================
     // CONSTRUCTOR (required for deployment)
