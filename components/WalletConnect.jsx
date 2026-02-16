@@ -1,8 +1,8 @@
 // Wallet connection button component
 // Uses Aleo wallet adapter for connection management
 
-import { useWallet } from "@demox-labs/aleo-wallet-adapter-react";
-import { useWalletModal } from "@demox-labs/aleo-wallet-adapter-reactui";
+import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
+import { useWalletModal } from "@provablehq/aleo-wallet-adaptor-react-ui";
 import { Button } from "@/components/ui/button";
 import { truncateAddress } from "@/lib/aleo";
 import { Wallet, LogOut, Loader2 } from "lucide-react";
@@ -13,14 +13,14 @@ import { Wallet, LogOut, Loader2 } from "lucide-react";
  * Handles wallet connection/disconnection
  */
 export function WalletConnect() {
-  const { publicKey, wallet, connecting, connected, disconnect } = useWallet();
+  const { address, wallet, connecting, connected, disconnect } = useWallet();
   const { setVisible } = useWalletModal();
 
   // Log wallet state changes
   console.log("[Aloe:Wallet] State:", {
     connected,
     connecting,
-    publicKey: publicKey ? `${publicKey.slice(0, 12)}...` : null,
+    address: address ? `${address.slice(0, 12)}...` : null,
     wallet: wallet?.adapter?.name || null,
   });
 
@@ -52,13 +52,13 @@ export function WalletConnect() {
   }
 
   // Show connected state with address and disconnect option
-  if (connected && publicKey) {
+  if (connected && address) {
     return (
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2">
           <div className="h-2 w-2 rounded-full bg-green-500" />
           <span className="text-sm font-medium">
-            {truncateAddress(publicKey)}
+            {truncateAddress(address)}
           </span>
           {wallet && (
             <span className="text-xs text-muted-foreground">
