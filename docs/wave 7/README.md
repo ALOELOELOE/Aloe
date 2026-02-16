@@ -1,106 +1,62 @@
-# Wave 7: Private Identity & Reputation
+# Wave 7: RWA Exchange Module
 
 **Timeline:** April 14 - April 28, 2026
-**Theme:** Zero-Knowledge Reputation
+**Theme:** Real-World Asset Trading
 **Status:** Planned
 
 ---
 
 ## Overview
 
-Wave 7 introduces a privacy-preserving reputation system using zero-knowledge proofs. Users can prove their auction history (successful bids, payments, reliability) without revealing their full transaction history or wallet address.
+Wave 7 introduces Aloe's fifth and final core module: **RWA (Real-World Asset) Exchange** — a marketplace for tokenized real-world assets including real estate, commodities, securities, and other off-chain assets. This module brings private ownership and trading of fractional asset units to Aleo.
+
+The key privacy innovations: ownership records are fully private (only the holder sees their units), purchase amounts are hidden, and secondary market transfers are invisible to third parties. Only the aggregate holder count is public — individual holdings remain encrypted.
+
+This completes Aloe's 5-module suite: Auctions + OTC + Launches + NFT + **RWA**.
+
+**Current State:** The RWA page (`pages/rwa.js`) has a "Coming Soon" placeholder. This wave replaces it with a full exchange UI and smart contract.
 
 ---
 
 ## Smart Contract
 
-### Reputation Records
+### Program: `aloe_rwa_v1.aleo`
 
-```leo
-record ReputationBadge {
-    owner: address,
-    badge_type: u8,               // Type of achievement
-    earned_at: u32,               // Block height when earned
-    auction_count: u32,           // Anonymized count
-    proof_hash: field,            // ZK proof of eligibility
-}
+**Location:** `contracts/zkrwa/src/main.leo`
 
-// Badge types
-const BADGE_VERIFIED_BIDDER: u8 = 1u8;    // Completed 5+ auctions
-const BADGE_TRUSTED_SELLER: u8 = 2u8;     // 10+ successful sales
-const BADGE_WHALE: u8 = 3u8;              // Total volume > threshold
-const BADGE_EARLY_ADOPTER: u8 = 4u8;      // First 100 users
-const BADGE_RELIABLE: u8 = 5u8;           // 100% reveal rate
-```
+Imports `credits.aleo` for all value transfers.
 
-### Reputation Structs
+### Data Structures
 
-```leo
-struct ReputationProof {
-    badge_type: u8,
-    threshold_met: bool,
-    proof_commitment: field,
-}
+| Type | Name | Key Fields | Purpose |
+|------|------|------------|---------|
+| Struct | `RWAAsset` | `asset_id`, `issuer`, `asset_type` (u8), `asset_hash`, `total_units`, `price_per_unit`, `units_sold`, `holder_count`, `attestation_hash`, `status` | On-chain asset metadata. `units_sold` and `holder_count` are the only publicly-updating fields. Status: 0=active, 1=delisted |
+| Record | `RWAOwnership` | `owner`, `asset_id`, `asset_type`, `units` | Private ownership record — only the holder sees their units |
+| Record | `PurchaseOrder` | `owner`, `asset_id`, `units`, `total_cost`, `issuer` | Private purchase receipt |
 
-struct AnonStats {
-    auctions_participated: u32,
-    auctions_won: u32,
-    reveal_rate_percent: u8,      // 0-100
-    volume_tier: u8,              // 0-5 scale
-}
-```
+### Asset Type Constants
 
-### New Transitions
+| Value | Asset Type | Examples |
+|-------|-----------|----------|
+| `0u8` | Real Estate | Tokenized property, REITs |
+| `1u8` | Commodity | Gold, silver, oil fractions |
+| `2u8` | Security | Bonds, equity tokens |
+| `3u8` | Other | Carbon credits, collectibles |
+
+### Transitions
 
 | Transition | Visibility | Description |
 |------------|------------|-------------|
-| `claim_badge` | Private | Claim reputation badge with ZK proof |
-| `verify_badge` | Public | Verify badge validity without revealing owner |
-| `attach_badge` | Private | Attach badge to auction for credibility |
-| `prove_reputation` | Private | Generate proof of reputation threshold |
+| `register_asset` | Public | Issuer specifies asset_id, asset_type (must be 0-3), asset_hash (BHP256 hash of off-chain metadata), total_units, price_per_unit, and attestation_hash (reference to legal compliance docs). Finalize checks no duplicate asset_id exists and stores the `RWAAsset` struct in the `assets` mapping. |
+| `purchase_units` | Private + Public | Buyer specifies asset_id, private units amount, and issuer address. Calls `credits.aleo/transfer_public_as_signer` to pay the issuer directly (no escrow — immediate transfer). Returns an `RWAOwnership` record and `PurchaseOrder` receipt to the buyer. Finalize checks asset is active, enough units remain, and increments `units_sold` and `holder_count`. |
+| `transfer_units` | Private | Fully private secondary market transfer. Owner consumes their `RWAOwnership` record, specifies a recipient and amount. Returns two new `RWAOwnership` records: one with remaining units for sender, one with transferred units for recipient. No on-chain mapping updates — entirely private. |
+| `delist_asset` | Public | Issuer removes their asset from the exchange. Finalize checks caller is the issuer and sets status to delisted (1). Existing `RWAOwnership` records remain valid — only prevents new purchases. |
 
-### Badge Claim Flow
+### Mappings
 
-```leo
-async transition claim_badge(
-    private activity_records: [AuctionRecord; 10],
-    public badge_type: u8,
-) -> (ReputationBadge, Future) {
-    // Verify activity meets badge requirements
-    let count: u32 = count_valid_records(activity_records);
-    let threshold: u32 = get_threshold(badge_type);
-    assert(count >= threshold);
-
-    // Generate proof hash
-    let proof_hash: field = BHP256::hash_to_field((self.caller, badge_type, count));
-
-    let badge: ReputationBadge = ReputationBadge {
-        owner: self.caller,
-        badge_type: badge_type,
-        earned_at: block.height,
-        auction_count: count,
-        proof_hash: proof_hash,
-    };
-
-    return (badge, finalize_claim_badge(proof_hash, badge_type));
-}
-```
-
-### Reputation Verification
-
-```leo
-// Verify reputation without revealing identity
-async transition verify_reputation(
-    private badge: ReputationBadge,
-    public required_type: u8,
-    public required_count: u32,
-) -> bool {
-    // Check badge meets requirements
-    assert(badge.badge_type >= required_type);
-    assert(badge.auction_count >= required_count);
-    return true;
-}
-```
+| Mapping | Key → Value | Purpose |
+|---------|-------------|---------|
+| `assets` | `field => RWAAsset` | asset_id → RWAAsset struct |
 
 ---
 
@@ -108,43 +64,41 @@ async transition verify_reputation(
 
 ### New Components
 
-| Component | Description |
-|-----------|-------------|
-| `ReputationDashboard.jsx` | View earned badges and stats |
-| `BadgeDisplay.jsx` | Visual badge with tooltip |
-| `ClaimBadgeButton.jsx` | Claim earned badges |
-| `ReputationProof.jsx` | Generate/verify reputation proofs |
-| `TrustIndicator.jsx` | Show seller/bidder trustworthiness |
-| `AnonStatsCard.jsx` | Display anonymized statistics |
-| `BadgeRequirements.jsx` | Show requirements for each badge |
+| Component | File Path | Description |
+|-----------|-----------|-------------|
+| RWAAssetCard | `components/RWAAssetCard.jsx` | Card showing asset name, type icon, units available, price, attestation badge |
+| RWAAssetList | `components/RWAAssetList.jsx` | Grid of available RWA assets with type and price filters |
+| RegisterAssetForm | `components/RegisterAssetForm.jsx` | Form for issuers to register a new RWA — type selector, units, price, attestation reference |
+| PurchaseUnitsDialog | `components/PurchaseUnitsDialog.jsx` | Modal for purchasing fractional units — amount input, cost calculator |
+| RWAPortfolio | `components/RWAPortfolio.jsx` | User's private portfolio view showing owned RWA units across all assets |
+| AttestationBadge | `components/AttestationBadge.jsx` | Visual indicator showing asset has a verified attestation hash |
+| AssetTypeIcon | `components/AssetTypeIcon.jsx` | Icon component for asset types: building (real estate), gem (commodity), shield (security), box (other) |
+| TransferUnitsDialog | `components/TransferUnitsDialog.jsx` | Modal for transferring owned units to another address |
 
-### Badge System UI
+### Transaction Builders (`lib/rwa.js`)
 
-1. **Badge Gallery**
-   - All available badges with requirements
-   - Progress toward unclaimed badges
-   - Claimed badges with earn date
+New file with four builder functions: `buildRegisterAssetInputs`, `buildPurchaseUnitsInputs`, `buildTransferUnitsInputs`, and `buildDelistAssetInputs`. Same pattern as other lib files.
 
-2. **Profile Reputation**
-   - Badge display on user profile
-   - Anonymized stats (tier-based, not exact)
-   - Trust score indicator
+### New Store (`store/rwaStore.js`)
 
-3. **Auction Integration**
-   - Seller badges on auction cards
-   - "Verified Seller" indicator
-   - Bidder reputation requirements (optional)
+Zustand store with state fields (`assets`, `portfolio`, `isRegistering`, `isPurchasing`, `isTransferring`) and actions (`fetchAssets`, `getAssetsByType`, `getActiveAssets`, `registerAsset`, `purchaseUnits`, `transferUnits`, `fetchPortfolio`).
 
-### Trust Indicators
+### Page Update (`pages/rwa.js`)
 
-```
-Reputation Tiers:
-⭐         New user (< 5 auctions)
-⭐⭐       Established (5-20 auctions)
-⭐⭐⭐     Trusted (20-50 auctions)
-⭐⭐⭐⭐   Expert (50-100 auctions)
-⭐⭐⭐⭐⭐  Elite (100+ auctions)
-```
+Replace the "Coming Soon" placeholder with full exchange UI:
+- Asset grid with type filters (Real Estate / Commodity / Security / Other)
+- Register Asset button (for issuers)
+- Asset detail view on card click with purchase action
+- "My Portfolio" tab showing private ownership records
+- Transfer dialog for secondary market transfers
+
+### Constants Update (`lib/constants.js`)
+
+Add `RWA: "aloe_rwa_v1.aleo"` to the `PROGRAMS` object. Add `ASSET_TYPE` enum (REAL_ESTATE=0, COMMODITY=1, SECURITY=2, OTHER=3), `ASSET_TYPE_LABELS` for display, and `ASSET_STATUS` enum (ACTIVE=0, DELISTED=1).
+
+### Dashboard Integration
+
+Add RWA activity data to the `activityStore.js` (created in Wave 3). The activity dashboard (`/my-activity`) now shows all 5 modules' activity — completing the cross-module activity feed originally scaffolded in Wave 3.
 
 ---
 
@@ -152,42 +106,46 @@ Reputation Tiers:
 
 | Feature | Privacy Impact |
 |---------|----------------|
-| Anonymous badges | Prove reputation without revealing identity |
-| ZK proofs | Verify thresholds without exposing exact counts |
-| Unlinkable history | Past auctions not connected to current activity |
-| Tiered disclosure | Show tier (e.g., "50+") not exact number |
-| Selective proving | Choose which reputation aspects to reveal |
+| Private ownership records | RWAOwnership records are encrypted — only the holder sees their units |
+| Hidden purchase amounts | Individual purchase sizes are private; only units_sold updates publicly |
+| Anonymous secondary transfers | transfer_units is fully private — no on-chain trace of who transferred to whom |
+| Aggregate-only public data | Only units_sold and holder_count are public — individual holdings invisible |
+| Portfolio concealment | No way to determine what assets an address holds by scanning the chain |
 
-**Privacy Score Contribution:** Very High — This is a flagship privacy feature demonstrating Aleo's ZK capabilities.
+**Privacy Score:** Very High — Ownership privacy is critical for real-world assets where revealing holdings could invite targeted attacks or regulatory arbitrage.
 
 ---
 
 ## Testing Checklist
 
-### Badge Claiming
-- [ ] Can claim badge when threshold met
-- [ ] Cannot claim badge below threshold
-- [ ] Badge records correct count
-- [ ] Proof hash generated correctly
-- [ ] Cannot claim same badge twice
+### Register Asset
+- [ ] Issuer can register an asset with valid parameters
+- [ ] Asset stored in `assets` mapping with correct metadata
+- [ ] Cannot register with invalid asset_type (>3)
+- [ ] Cannot register duplicate asset_id
+- [ ] Attestation hash stored correctly
 
-### Badge Verification
-- [ ] Valid badges verify successfully
-- [ ] Invalid badges rejected
-- [ ] Verification doesn't reveal owner
-- [ ] Works across different badge types
+### Purchase Units
+- [ ] Buyer can purchase units from an active asset
+- [ ] Credits transferred to issuer via credits.aleo
+- [ ] RWAOwnership record returned with correct units
+- [ ] PurchaseOrder receipt returned
+- [ ] Cannot purchase more units than available (total_units - units_sold)
+- [ ] Cannot purchase from delisted asset
+- [ ] units_sold and holder_count update correctly
 
-### Auction Integration
-- [ ] Seller badges display on auctions
-- [ ] Can require minimum reputation to bid
-- [ ] Reputation filters work
-- [ ] Trust indicators accurate
+### Transfer Units
+- [ ] Owner can transfer units to another address
+- [ ] Sender's remaining units calculated correctly
+- [ ] Recipient receives new RWAOwnership record
+- [ ] Cannot transfer more units than owned
+- [ ] Transfer is fully private (no public mapping updates)
 
-### Privacy Tests
-- [ ] Cannot link badges to transaction history
-- [ ] Tier display (not exact counts)
-- [ ] Proofs don't leak information
-- [ ] Multiple badges unlinkable
+### Delist Asset
+- [ ] Issuer can delist their own asset
+- [ ] Non-issuer cannot delist
+- [ ] Delisted asset cannot receive new purchases
+- [ ] Existing ownership records remain valid after delisting
 
 ---
 
@@ -195,65 +153,20 @@ Reputation Tiers:
 
 | Metric | Target |
 |--------|--------|
-| Badge types | 5+ badge types available |
-| Claim success | 100% eligible users can claim |
-| Verification speed | < 2 seconds |
-| Privacy preservation | Zero information leakage |
-| User adoption | 50%+ active users have 1+ badge |
+| Asset registration | Full register → purchase → transfer flow working |
+| Ownership privacy | Individual holdings not visible on-chain |
+| Transfer privacy | Secondary market transfers leave no public trace |
+| Payment accuracy | 100% of purchase credits correctly transferred to issuers |
+| Portfolio display | User's private portfolio renders correctly from records |
 
 ---
 
-## Badge Catalog
+## Demo Scenarios
 
-| Badge | Requirement | Display |
-|-------|-------------|---------|
-| 🌱 First Auction | Complete first auction | "New Member" |
-| ✅ Verified Bidder | 5+ successful bids | "Verified" |
-| 🏆 Winner | 10+ auctions won | "Frequent Winner" |
-| 💎 Trusted Seller | 10+ successful sales | "Trusted Seller" |
-| 🐋 High Volume | > 10,000 credits volume | "Whale" |
-| ⚡ Reliable | 100% reveal rate (20+ bids) | "Always Reveals" |
-| 🌟 Early Adopter | First 100 users | "Pioneer" |
-| 🔒 Privacy Advocate | Used private features | "Privacy Pro" |
-
----
-
-## ZK Reputation Proofs
-
-### Proof Types
-
-1. **Threshold Proof**
-   - "I have completed at least N auctions"
-   - Doesn't reveal exact count
-
-2. **Range Proof**
-   - "My total volume is between X and Y"
-   - Reveals tier, not amount
-
-3. **Rate Proof**
-   - "My reveal rate is above 95%"
-   - Binary yes/no
-
-4. **Recency Proof**
-   - "I was active in the last 30 days"
-   - Doesn't reveal specific activity
-
-### Use Cases
-
-- **Gated Auctions**: "Only users with 10+ completed auctions can bid"
-- **Trust Display**: "This seller has Trusted Seller badge"
-- **Whale Rooms**: "Minimum 10,000 credit volume to enter"
-- **Reliability Filter**: "Only show sellers with 95%+ completion rate"
-
----
-
-## Future Extensions
-
-- Cross-platform reputation (other Aleo apps)
-- Reputation delegation (vouch for others)
-- Time-decaying reputation
-- Dispute resolution integration
-- Reputation NFTs (tradeable?)
+1. **Property Purchase**: Issuer registers 1000 units of tokenized property → 5 buyers purchase varying amounts → Each sees only their own holdings
+2. **Secondary Transfer**: Owner transfers 50 units to another address → Transfer is invisible on-chain → Recipient sees units in their portfolio
+3. **Commodity Investment**: Issuer registers gold-backed tokens → Buyers purchase fractional units → Portfolio shows gold allocation
+4. **Delisting**: Issuer delists an asset → Existing holders retain their records → No new purchases allowed
 
 ---
 

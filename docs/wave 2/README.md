@@ -8,73 +8,35 @@
 
 ## Overview
 
-Wave 2 completes the core auction lifecycle by implementing the reveal phase, auction settlement, and refund mechanisms. After this wave, Aloe will support a full end-to-end sealed-bid auction flow from creation to settlement.
+Wave 2 completes the core auction lifecycle by implementing the reveal phase, auction settlement, refund mechanisms, and cancellation. After this wave, Aloe's auction module supports a full end-to-end sealed-bid auction flow — from creation through settlement — with real credits locked and transferred via `credits.aleo`.
+
+This is the first module to reach full lifecycle completion, establishing patterns that OTC, Launches, NFT, and RWA modules will follow in subsequent waves.
 
 ---
 
 ## Smart Contract
 
-### credits.aleo Impact
+### Program: `aloe_auction_v2.aleo`
 
-> **Important:** As of Wave 1 post-updates, `place_bid` now transfers real credits into escrow via `credits.aleo/transfer_public_as_signer`. This means Wave 2's `claim_refund` and `settle_auction` transitions must handle **actual credit transfers** back to users — not just mapping updates. `claim_refund` should call `credits.aleo/transfer_public` to return deposits to losing bidders, and `settle_auction` should transfer the winning bid to the auctioneer.
+> **credits.aleo Integration:** Wave 1's `place_bid` already transfers real credits into escrow via `credits.aleo/transfer_public_as_signer`. Wave 2's `claim_refund` and `settle_auction` must handle **actual credit transfers** back to users — not just mapping updates.
 
 ### New Transitions
 
 | Transition | Visibility | Description |
 |------------|------------|-------------|
-| `reveal_bid` | Private → Public | Bidder reveals bid amount and salt, contract verifies commitment hash |
-| `settle_auction` | Public | Determines winner, transfers winning bid to auctioneer via `credits.aleo` |
-| `claim_refund` | Private | Non-winners reclaim their deposits via `credits.aleo` transfer |
-| `cancel_auction` | Public | Auctioneer cancels auction if no bids received |
+| `reveal_bid` | Private → Public | Bidder reveals bid amount and salt. Contract re-hashes the inputs using `BHP256` and verifies the result matches the commitment stored in the `BidCommitment` record. Also checks that the deposit covers the bid amount. On-chain finalize checks timing (must be between commit and reveal deadlines), updates `highest_bid` / `highest_bidder` if this bid is the new leader, and increments `revealed_count`. |
+| `settle_auction` | Public | Callable by anyone after the reveal deadline. Calls `credits.aleo/transfer_public` to send the winning bid amount to the auctioneer. Finalize awaits the transfer, then looks up the winner from `highest_bidder` and updates the auction status to settled (2). |
+| `claim_refund` | Private | Non-winners consume their `BidCommitment` record to reclaim deposits. Calls `credits.aleo/transfer_public` to send the deposit amount back to the bidder. Finalize awaits the transfer, then asserts the auction is settled, the caller is not the winner, and the refund hasn't already been claimed. Marks the commitment as claimed in `refund_claimed`. |
+| `cancel_auction` | Public | Auctioneer cancels an auction that received zero bids. Finalize checks that the caller is the auctioneer, the bid count is zero, and updates the auction status to cancelled (3). |
 
 ### New Mappings
 
-```leo
-mapping revealed_count: field => u32;      // auction_id => number of reveals
-mapping highest_bid: field => u64;         // auction_id => current highest bid
-mapping highest_bidder: field => address;  // auction_id => current highest bidder
-mapping refund_claimed: field => bool;     // commitment => refund claimed
-```
-
-### reveal_bid Implementation
-
-```leo
-async transition reveal_bid(
-    private bid_record: BidCommitment,
-    private bid_amount: u64,
-    private salt: field,
-) -> Future {
-    // Verify commitment matches: hash(bid_amount, salt, auction_id)
-    let expected: field = BHP256::hash_to_field((bid_amount, salt, bid_record.auction_id));
-    assert_eq(expected, bid_record.commitment);
-
-    // Verify deposit covers bid
-    assert(bid_record.deposit >= bid_amount);
-
-    return finalize_reveal_bid(bid_record.auction_id, self.caller, bid_amount);
-}
-```
-
-### settle_auction Implementation
-
-```leo
-async transition settle_auction(public auction_id: field) -> Future {
-    return finalize_settle_auction(auction_id);
-}
-
-async function finalize_settle_auction(auction_id: field) {
-    let auction: Auction = Mapping::get(auctions, auction_id);
-    assert(block.height > auction.reveal_deadline);
-    assert(auction.status != 2u8); // Not already settled
-
-    let winner: address = Mapping::get(highest_bidder, auction_id);
-    let winning_bid: u64 = Mapping::get(highest_bid, auction_id);
-
-    // Update auction to settled status
-    let settled: Auction = Auction { ...auction, status: 2u8, winner, winning_bid };
-    Mapping::set(auctions, auction_id, settled);
-}
-```
+| Mapping | Key → Value | Purpose |
+|---------|-------------|---------|
+| `revealed_count` | `field => u32` | auction_id → number of reveals received |
+| `highest_bid` | `field => u64` | auction_id → current highest bid amount |
+| `highest_bidder` | `field => address` | auction_id → address of the current highest bidder |
+| `refund_claimed` | `field => bool` | commitment hash → whether refund was already claimed |
 
 ---
 
@@ -82,32 +44,47 @@ async function finalize_settle_auction(auction_id: field) {
 
 ### New Components
 
-| Component | Description |
-|-----------|-------------|
-| `RevealBidDialog.jsx` | Modal for revealing bids with salt retrieval |
-| `AuctionTimer.jsx` | Countdown timer showing phase transitions |
-| `SettleAuctionButton.jsx` | Button to trigger auction settlement |
-| `ClaimRefundButton.jsx` | Button for non-winners to claim deposits |
-| `AuctionStatusBadge.jsx` | Visual indicator for auction phase |
+| Component | File Path | Description |
+|-----------|-----------|-------------|
+| RevealBidDialog | `components/RevealBidDialog.jsx` | Modal for revealing bids — retrieves salt from localStorage, verifies commitment, submits reveal transaction |
+| AuctionTimer | `components/AuctionTimer.jsx` | Countdown timer showing time remaining in current phase (commit / reveal / ended) |
+| SettleAuctionButton | `components/SettleAuctionButton.jsx` | Button to trigger auction settlement after reveal phase ends |
+| ClaimRefundButton | `components/ClaimRefundButton.jsx` | Button for non-winners to reclaim their deposit via credits.aleo |
+| AuctionStatusBadge | `components/AuctionStatusBadge.jsx` | Visual badge showing current auction phase with color coding |
+| AuctionDetailDialog | `components/AuctionDetailDialog.jsx` | Full auction detail view with phase-aware action buttons |
+
+### Transaction Builders (lib/aleo.js)
+
+| Function | Description |
+|----------|-------------|
+| `buildRevealBidInputs(bidRecord, bidAmount, salt)` | Constructs inputs for `reveal_bid` transition |
+| `buildSettleAuctionInputs(auctionId, auctioneer, winningAmount)` | Constructs inputs for `settle_auction` transition |
+| `buildClaimRefundInputs(bidRecord)` | Constructs inputs for `claim_refund` transition |
+| `buildCancelAuctionInputs(auctionId)` | Constructs inputs for `cancel_auction` transition |
 
 ### Salt Management
 
-- Retrieve salt from `localStorage` using `auction_id` as key
-- Display warning if salt not found
-- Provide manual salt entry as fallback
-- Show clear instructions for reveal process
+- Retrieve salt from `localStorage` using `auction_id` as key (stored during `place_bid`)
+- Display warning if salt not found (user must have placed bid from same browser)
+- Provide manual salt entry as fallback input
+- Show clear step-by-step instructions for the reveal process
+
+### Store Updates (`store/auctionStore.js`)
+
+| Field / Action | Description |
+|----------------|-------------|
+| `isRevealing` | Loading state for reveal transaction |
+| `isSettling` | Loading state for settle transaction |
+| `isClaiming` | Loading state for refund claim |
+| `revealBid(bidRecord, amount, salt)` | Execute reveal_bid transaction |
+| `settleAuction(auctionId)` | Execute settle_auction transaction |
+| `claimRefund(bidRecord)` | Execute claim_refund transaction |
+| `cancelAuction(auctionId)` | Execute cancel_auction transaction |
 
 ### UI Updates
 
-1. **Auction Detail Page**
-   - Phase-aware action buttons (bid → reveal → settle)
-   - Real-time countdown timer to phase transitions
-   - Winner announcement after settlement
-
-2. **My Bids Page**
-   - List of user's active bid commitments
-   - Status indicator: Committed / Revealed / Won / Refunded
-   - One-click reveal for bids in reveal phase
+1. **Auction Detail View** — Phase-aware action buttons (Bid → Reveal → Settle), real-time countdown, winner announcement banner, refund claim button for non-winners
+2. **Dashboard Enhancements** — Auction cards show current phase, "Action Required" indicator for bids needing reveal, filter by phase
 
 ---
 
@@ -115,12 +92,13 @@ async function finalize_settle_auction(auction_id: field) {
 
 | Feature | Privacy Impact |
 |---------|----------------|
-| Commit-reveal completion | Bids remain hidden until reveal phase begins |
-| Private reveal verification | Only bidder can reveal their own bid using their BidCommitment record |
+| Commit-reveal completion | Bids remain hidden until reveal phase begins — no early information leakage |
+| Private reveal verification | Only the bidder can reveal their own bid using their private BidCommitment record |
 | No bid linkage | Cannot correlate multiple bids from same address during commit phase |
 | Selective disclosure | Only revealed bids become public; unrevealed bids remain private forever |
+| Deposit forfeiture | Unrevealed bids forfeit deposits — creates economic incentive to reveal honestly |
 
-**Privacy Score Contribution:** High — This wave completes the core privacy mechanism that makes sealed-bid auctions trustworthy.
+**Privacy Score:** High — Completes the core privacy mechanism that makes sealed-bid auctions trustworthy on-chain.
 
 ---
 
@@ -128,28 +106,32 @@ async function finalize_settle_auction(auction_id: field) {
 
 ### Reveal Bid
 - [ ] Can reveal bid during reveal phase with correct salt
-- [ ] Cannot reveal bid during commit phase
-- [ ] Cannot reveal bid after reveal deadline
-- [ ] Cannot reveal with wrong salt (hash mismatch fails)
-- [ ] Cannot reveal with bid amount > deposit
+- [ ] Cannot reveal bid during commit phase (too early)
+- [ ] Cannot reveal bid after reveal deadline (too late)
+- [ ] Cannot reveal with wrong salt (hash mismatch assertion fails)
+- [ ] Cannot reveal with bid_amount > deposit (assertion fails)
+- [ ] Reveal correctly updates highest_bid and highest_bidder mappings
 
 ### Settle Auction
-- [ ] Can settle auction after reveal deadline
+- [ ] Can settle auction after reveal deadline passes
 - [ ] Cannot settle auction before reveal deadline
-- [ ] Correct winner determined (highest bid)
-- [ ] Auction status updates to "Settled"
-- [ ] Winner and winning bid stored correctly
+- [ ] Cannot settle an already-settled auction
+- [ ] Correct winner determined (highest revealed bid)
+- [ ] Winning credits transferred to auctioneer via credits.aleo
+- [ ] Auction status updates to settled (2)
 
 ### Claim Refund
-- [ ] Non-winners can claim their full deposit
-- [ ] Winners cannot claim refund
-- [ ] Cannot claim refund twice
+- [ ] Non-winners can claim their full deposit amount
+- [ ] Winners cannot claim refund (assertion fails)
+- [ ] Cannot claim refund twice (double-claim prevented)
 - [ ] Cannot claim refund for unrevealed bid (deposit forfeited)
+- [ ] Credits transferred back to bidder via credits.aleo
 
 ### Cancel Auction
-- [ ] Auctioneer can cancel if no bids received
+- [ ] Auctioneer can cancel if zero bids received
+- [ ] Non-auctioneer cannot cancel (caller check fails)
 - [ ] Cannot cancel auction with existing bids
-- [ ] Cannot cancel after commit phase ends
+- [ ] Auction status updates to cancelled (3)
 
 ---
 
@@ -157,18 +139,20 @@ async function finalize_settle_auction(auction_id: field) {
 
 | Metric | Target |
 |--------|--------|
-| Full auction cycle | Create → Bid → Reveal → Settle working |
-| Refund success rate | 100% of valid refund claims processed |
-| Phase transitions | Automatic status updates at deadlines |
+| Full auction cycle | Create → Bid → Reveal → Settle working end-to-end |
+| Refund success rate | 100% of valid refund claims processed correctly |
+| Credits conservation | Total credits in = total credits out (no value lost) |
+| Phase transitions | Correct enforcement of commit/reveal/settle timing |
 | Salt recovery | 95%+ users successfully retrieve salt for reveal |
 
 ---
 
 ## Demo Scenarios
 
-1. **Happy Path**: Create auction → 2 bidders place bids → Both reveal → Higher bid wins → Loser claims refund
+1. **Happy Path**: Create auction → 2 bidders place bids → Both reveal → Higher bid wins → Winner announced → Loser claims refund → Auctioneer receives credits
 2. **No Reveal**: Bidder places bid but doesn't reveal → Deposit forfeited → Auction settles with remaining reveals
 3. **Single Bidder**: Only one bid → Single reveal → Wins by default → Settlement completes
+4. **Cancelled Auction**: Create auction → No bids placed → Auctioneer cancels → Status set to Cancelled
 
 ---
 

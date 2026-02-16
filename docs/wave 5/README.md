@@ -1,92 +1,53 @@
-# Wave 5: NFT Auctions
+# Wave 5: Token Launches Module
 
 **Timeline:** March 17 - March 31, 2026
-**Theme:** Digital Collectibles
+**Theme:** Fair Private Launchpad
 **Status:** Planned
 
 ---
 
 ## Overview
 
-Wave 5 enables auctions for non-fungible tokens (NFTs) following the ARC-721 standard on Aleo. This wave implements NFT escrow, metadata display, and seamless transfer to auction winners.
+Wave 5 introduces Aloe's third core module: **Token Launches** — a fair launchpad where projects can distribute tokens using a private commitment pattern. Individual allocation sizes remain hidden, preventing whale sniping and ensuring fair distribution.
+
+The key privacy innovation: participants commit to allocation amounts privately, so no one can see how much others are buying. Only the total committed amount and participant count are public. This solves the common launchpad problem where whales monitor commitments and front-run smaller participants.
+
+**Current State:** The Launches page (`pages/launches.js`) has a "Coming Soon" placeholder. This wave replaces it with a fully functional launchpad UI and smart contract.
 
 ---
 
 ## Smart Contract
 
-### New Records
+### Program: `aloe_launches_v1.aleo`
 
-```leo
-record NFTEscrow {
-    owner: address,               // Contract address during auction
-    auction_id: field,
-    collection_id: field,         // NFT collection identifier
-    token_id: field,              // Unique NFT ID within collection
-    original_owner: address,      // Auctioneer (for return on cancel)
-}
-```
+**Location:** `contracts/zklaunches/src/main.leo`
 
-### New Structs
+Imports `credits.aleo` for all value transfers.
 
-```leo
-struct NFTAuction {
-    auction_id: field,
-    auctioneer: address,
-    collection_id: field,
-    token_id: field,
-    payment_token: field,         // Token accepted for payment
-    min_bid: u64,
-    commit_deadline: u32,
-    reveal_deadline: u32,
-    status: u8,
-    winner: address,
-    winning_bid: u64,
-}
+### Data Structures
 
-struct NFTMetadata {
-    collection_id: field,
-    token_id: field,
-    name_hash: field,             // Hash of NFT name
-    image_uri_hash: field,        // Hash of image URI
-    attributes_hash: field,       // Hash of attributes JSON
-}
-```
+| Type | Name | Key Fields | Purpose |
+|------|------|------------|---------|
+| Struct | `Launch` | `launch_id`, `creator`, `token_name_hash`, `total_supply`, `price_per_token`, `max_per_wallet`, `start_block`, `end_block`, `settle_block`, `status`, `total_committed`, `participant_count` | On-chain launch metadata. Status: 0=pending, 1=active, 2=settled, 3=cancelled. `total_committed` and `participant_count` are the only publicly-updating fields. |
+| Record | `LaunchCommitment` | `owner`, `launch_id`, `commit_amount`, `token_allocation`, `salt` | Private record proving a participant's commitment. The `commit_amount` is only visible to the owner. |
+| Record | `TokenAllocation` | `owner`, `launch_id`, `token_name_hash`, `amount` | Private record representing the participant's received token allocation after settlement |
 
-### New Transitions
+### Transitions
 
 | Transition | Visibility | Description |
 |------------|------------|-------------|
-| `create_nft_auction` | Private → Public | Escrow NFT and create auction |
-| `place_nft_bid` | Private | Place sealed bid on NFT auction |
-| `reveal_nft_bid` | Private → Public | Reveal bid for NFT auction |
-| `settle_nft_auction` | Public | Transfer NFT to winner |
-| `cancel_nft_auction` | Public | Return NFT to auctioneer |
+| `create_launch` | Public | Creator specifies launch_id, token_name_hash (BHP256 hash of name for privacy), total_supply, price_per_token, max_per_wallet, and durations for commit and settle phases. Finalize stores the `Launch` struct in the `launches` mapping with status=pending. |
+| `commit_to_launch` | Private + Public | Participant commits credits to buy tokens. Takes launch_id, private commit_amount, and private salt. Calls `credits.aleo/transfer_public_as_signer` to lock the commit_amount into program escrow. Returns a `LaunchCommitment` record. Finalize checks timing (must be in active phase), then increments `total_committed` and `participant_count` — but the individual `commit_amount` stays private. |
+| `settle_launch` | Public | Creator settles the launch after commit phase ends. Calculates token allocations based on commitments. For oversubscribed launches, applies pro-rata distribution. |
+| `claim_launch_tokens` | Private | Participant consumes their `LaunchCommitment` record to receive a `TokenAllocation` record after settlement. Finalize checks launch is settled and participant hasn't already claimed. |
+| `claim_launch_refund` | Private | If launch is cancelled, participant consumes `LaunchCommitment` and receives credits back via `credits.aleo/transfer_public`. Finalize checks launch status is cancelled. |
 
-### NFT Escrow Flow
+### Mappings
 
-```leo
-async transition create_nft_auction(
-    private nft_record: NFT,           // ARC-721 NFT record
-    public min_bid: u64,
-    public payment_token: field,
-    public commit_duration: u32,
-    public reveal_duration: u32,
-) -> (NFTEscrow, Future) {
-    // Generate unique auction ID
-    let auction_id: field = BHP256::hash_to_field((nft_record.collection_id, nft_record.token_id, self.caller));
-
-    // Create escrow record (NFT held by contract)
-    let escrow: NFTEscrow = NFTEscrow {
-        owner: ESCROW_ADDRESS,
-        auction_id: auction_id,
-        collection_id: nft_record.collection_id,
-        token_id: nft_record.token_id,
-        original_owner: self.caller,
-    };
-
-    return (escrow, finalize_create_nft_auction(...));
-}
-```
+| Mapping | Key → Value | Purpose |
+|---------|-------------|---------|
+| `launches` | `field => Launch` | launch_id → Launch struct with all metadata |
+| `launch_claimed` | `field => bool` | hash(launch_id, participant) → whether allocation was claimed |
 
 ---
 
@@ -94,52 +55,40 @@ async transition create_nft_auction(
 
 ### New Components
 
-| Component | Description |
-|-----------|-------------|
-| `NFTCard.jsx` | Display NFT with image, name, collection |
-| `NFTAuctionForm.jsx` | Create auction for NFT |
-| `NFTPreview.jsx` | Large NFT preview with metadata |
-| `NFTGallery.jsx` | Grid view of user's NFTs |
-| `CollectionBadge.jsx` | Collection name and verification |
-| `NFTAttributes.jsx` | Display NFT traits/attributes |
+| Component | File Path | Description |
+|-----------|-----------|-------------|
+| LaunchCard | `components/LaunchCard.jsx` | Card showing token name, price, supply, progress bar, and status badge |
+| LaunchList | `components/LaunchList.jsx` | Grid of active and upcoming launches with filters |
+| CreateLaunchForm | `components/CreateLaunchForm.jsx` | Form for creating a new token launch with validation |
+| CommitToLaunchDialog | `components/CommitToLaunchDialog.jsx` | Modal for committing credits — amount input, cost preview, allocation estimate |
+| LaunchProgressBar | `components/LaunchProgressBar.jsx` | Visual progress showing total_committed vs total_supply * price |
+| LaunchDetailDialog | `components/LaunchDetailDialog.jsx` | Full launch detail view with commit action and statistics |
+| LaunchStatusBadge | `components/LaunchStatusBadge.jsx` | Badge: Upcoming / Active / Settled / Cancelled |
 
-### NFT Display Features
+### Transaction Builders (`lib/launches.js`)
 
-1. **Image Rendering**
-   - Support IPFS, Arweave, HTTP URIs
-   - Lazy loading with placeholders
-   - Zoom/fullscreen view
-   - Fallback for broken images
+New file with five builder functions: `buildCreateLaunchInputs`, `buildCommitToLaunchInputs`, `buildSettleLaunchInputs`, `buildClaimLaunchTokensInputs`, and `buildClaimLaunchRefundInputs`. Each follows the same pattern as `lib/aleo.js`.
 
-2. **Metadata Display**
-   - NFT name and description
-   - Collection name and verification status
-   - Rarity attributes and traits
-   - Creator/artist information
+### New Store (`store/launchStore.js`)
 
-3. **Collection Pages**
-   - Browse NFTs by collection
-   - Collection statistics (floor, volume)
-   - Collection verification badges
+Zustand store with state fields (`launches`, `isCreating`, `isCommitting`, `isClaiming`) and actions (`fetchLaunches`, `getActiveLaunches`, `getUpcomingLaunches`, `createLaunch`, `commitToLaunch`, `claimTokens`, `claimRefund`).
 
-### UI Updates
+### Page Update (`pages/launches.js`)
 
-1. **Create Auction Flow**
-   - NFT selector from user's wallet
-   - Preview selected NFT
-   - Set minimum bid and payment token
-   - Confirm escrow transaction
+Replace the "Coming Soon" placeholder with full launchpad UI:
+- Launch list with tabs: Active / Upcoming / Completed
+- Create Launch button (connected wallet required)
+- Launch detail view on card click
+- Commit dialog with amount input and cost calculator
+- Progress bar showing participation level
 
-2. **Auction Detail Page**
-   - Large NFT image/media display
-   - Trait rarity indicators
-   - Collection link
-   - Provenance history (if available)
+### Constants Update (`lib/constants.js`)
 
-3. **Won NFTs**
-   - Display in My Bids dashboard
-   - Link to view in wallet
-   - Transfer/re-auction options
+Add `LAUNCHES: "aloe_launches_v1.aleo"` to the `PROGRAMS` object. Add `LAUNCH_STATUS` enum (PENDING=0, ACTIVE=1, SETTLED=2, CANCELLED=3).
+
+### Dashboard Integration
+
+Add launch activity data to the `activityStore.js` (created in Wave 3). The activity dashboard (`/my-activity`) now shows auction, OTC, and launch activity in its feed and summary cards.
 
 ---
 
@@ -147,45 +96,45 @@ async transition create_nft_auction(
 
 | Feature | Privacy Impact |
 |---------|----------------|
-| Private NFT ownership | NFT ownership hidden until auction creation |
-| Sealed NFT bids | Bid amounts for NFTs remain private until reveal |
-| Anonymous bidding | Cannot link bidders to bids during commit phase |
-| Private collections | Support for private NFT collections |
+| Hidden allocation sizes | Individual commit amounts are private records — no one sees how much others are buying |
+| Anti-whale protection | Whales cannot monitor other commitments and front-run smaller participants |
+| Private token receipts | TokenAllocation records are encrypted — only the owner sees their allocation |
+| Public aggregate only | Only total_committed and participant_count are public — individual amounts hidden |
+| Fair distribution | max_per_wallet enforced without revealing who is near the limit |
 
-**Privacy Score Contribution:** High — NFT auctions are a prime use case for privacy (no front-running on rare items).
+**Privacy Score:** Very High — Solves the #1 problem with public launchpads: whale sniping via commitment monitoring.
 
 ---
 
 ## Testing Checklist
 
-### NFT Auction Creation
-- [ ] Can create auction from owned NFT
-- [ ] NFT correctly escrowed on creation
-- [ ] Cannot auction NFT you don't own
-- [ ] Metadata displays correctly
-- [ ] Collection info appears
+### Create Launch
+- [ ] Creator can create a launch with valid parameters
+- [ ] Launch stored in on-chain `launches` mapping
+- [ ] Status set to pending (0) initially
+- [ ] Cannot create launch with zero supply or zero price
 
-### NFT Bidding
-- [ ] Can place sealed bid on NFT auction
-- [ ] Multiple bidders work correctly
-- [ ] Bid amounts stay hidden
+### Commit to Launch
+- [ ] Participant can commit credits during active phase
+- [ ] Credits correctly escrowed via credits.aleo
+- [ ] LaunchCommitment record returned with correct amounts
+- [ ] total_committed and participant_count update publicly
+- [ ] Individual commit_amount remains private
+- [ ] Cannot commit more than max_per_wallet
+- [ ] Cannot commit after end_block
 
-### NFT Settlement
-- [ ] Winner receives NFT on settlement
-- [ ] NFT ownership transfers correctly
-- [ ] Auctioneer receives payment
-- [ ] Losers receive refunds
+### Settle Launch
+- [ ] Creator can settle after commit phase ends
+- [ ] Token allocations calculated correctly
+- [ ] Oversubscribed launches: pro-rata distribution
+- [ ] Cannot settle before end_block
+- [ ] Cannot settle already-settled launch
 
-### NFT Cancellation
-- [ ] Auctioneer can cancel with no bids
-- [ ] NFT returns to original owner
-- [ ] Cannot cancel with existing bids
-
-### Edge Cases
-- [ ] NFT with no image/broken URI handled
-- [ ] Large image files load properly
-- [ ] NFT from unverified collection works
-- [ ] Multiple NFTs from same collection
+### Claim / Refund
+- [ ] Participants can claim TokenAllocation after settlement
+- [ ] Participants can claim refund if launch is cancelled
+- [ ] Cannot claim twice
+- [ ] Excess credits refunded in oversubscribed launches
 
 ---
 
@@ -193,56 +142,20 @@ async transition create_nft_auction(
 
 | Metric | Target |
 |--------|--------|
-| NFT display quality | Images render correctly |
-| Metadata accuracy | 100% correct trait display |
-| Escrow security | Zero NFT loss incidents |
-| Transfer success | 100% winner transfers complete |
-| Collection support | 10+ collections integrated |
+| Launch creation | Full create → commit → settle flow working |
+| Privacy verification | Individual commit amounts not visible on-chain |
+| Escrow accuracy | 100% of committed credits properly locked and distributed |
+| Refund reliability | 100% of cancelled launch refunds processed |
+| Fair distribution | max_per_wallet correctly enforced |
 
 ---
 
-## Supported NFT Standards
+## Demo Scenarios
 
-| Standard | Support Level |
-|----------|---------------|
-| ARC-721 | Full support |
-| Custom NFTs | Via adapter pattern |
-| Multi-edition | Partial (single token per auction) |
-
----
-
-## Metadata Storage
-
-### On-Chain
-- Collection ID and token ID
-- Ownership records
-- Auction history
-
-### Off-Chain (IPFS/Arweave)
-- Image files
-- Full metadata JSON
-- Animation files (if applicable)
-
-### Indexer Requirements
-- Fetch NFT metadata from URI
-- Cache images for fast loading
-- Track collection statistics
-
----
-
-## Integration Points
-
-### NFT Marketplaces
-- Import NFTs from existing Aleo marketplaces
-- Export auction results for marketplace display
-
-### Wallets
-- Display won NFTs in wallet
-- NFT transfer from wallet to auction
-
-### Collections
-- Verified collection registry
-- Creator royalty support (future)
+1. **Happy Path**: Creator launches token (1000 supply, 10 credits each) → 5 participants commit varying amounts → Creator settles → Participants claim tokens
+2. **Oversubscribed**: Total commitments exceed supply → Pro-rata distribution → Excess credits refunded
+3. **Cancelled Launch**: Creator cancels before settlement → All participants reclaim credits
+4. **Max Per Wallet**: Participant tries to commit more than max_per_wallet → Transaction rejected
 
 ---
 

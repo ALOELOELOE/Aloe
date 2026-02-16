@@ -1,136 +1,58 @@
-# Wave 6: Auction Variants
+# Wave 6: NFT Marketplace Module
 
 **Timeline:** March 31 - April 14, 2026
-**Theme:** Advanced Auction Mechanisms
+**Theme:** Private NFT Trading
 **Status:** Planned
 
 ---
 
 ## Overview
 
-Wave 6 introduces alternative auction formats beyond first-price sealed-bid: Vickrey (second-price), Dutch (descending price), and reverse auctions. Each variant serves different use cases while maintaining Aleo's privacy guarantees.
+Wave 6 introduces Aloe's fourth core module: **NFT Marketplace** — a private trading venue for non-fungible tokens using sealed-bid auctions and instant buy-now purchases. The module reuses the commit-reveal pattern from auctions (Wave 2-3) for NFT bidding, while adding a direct purchase path for fixed-price listings.
+
+The privacy advantage over existing NFT marketplaces: bid amounts on NFTs remain sealed until the reveal phase, preventing last-second bid sniping. Sellers also benefit — their portfolio holdings remain private since listing/ownership records are encrypted.
+
+**Current State:** The NFT page (`pages/nft.js`) has a "Coming Soon" placeholder. This wave replaces it with a full marketplace UI and smart contract.
 
 ---
 
 ## Smart Contract
 
-### Auction Types Enum
+### Program: `aloe_nft_v1.aleo`
 
-```leo
-// Auction type constants
-const FIRST_PRICE: u8 = 0u8;      // Highest bid wins, pays bid amount
-const VICKREY: u8 = 1u8;          // Highest bid wins, pays second-highest
-const DUTCH: u8 = 2u8;            // Descending price, first taker wins
-const REVERSE: u8 = 3u8;          // Lowest bid wins (procurement)
-```
+**Location:** `contracts/zknft/src/main.leo`
 
-### Extended Auction Struct
+Imports `credits.aleo` for all value transfers.
 
-```leo
-struct AuctionV2 {
-    auction_id: field,
-    auctioneer: address,
-    item_id: field,
-    auction_type: u8,             // NEW: Type of auction
-    starting_price: u64,          // For Dutch auctions
-    reserve_price: u64,           // Hidden minimum (optional)
-    price_decrement: u64,         // Dutch: amount to decrease per block
-    min_bid: u64,
-    commit_deadline: u32,
-    reveal_deadline: u32,
-    status: u8,
-    winner: address,
-    winning_bid: u64,
-    payment_amount: u64,          // NEW: Actual payment (may differ from winning_bid)
-}
-```
+### Data Structures
 
-### New Mappings
+| Type | Name | Key Fields | Purpose |
+|------|------|------------|---------|
+| Struct | `Listing` | `listing_id`, `seller`, `collection_id`, `token_id`, `min_price`, `buy_now_price` (0 if none), `commit_deadline`, `reveal_deadline`, `status`, `winner`, `winning_bid` | On-chain listing metadata. Status: 0=active, 1=settled, 2=cancelled |
+| Struct | `NFTCommitmentData` | `bid_amount`, `salt`, `listing_id` | Helper struct for generating BHP256 commitment hashes on NFT bids |
+| Record | `NFTBid` | `owner`, `listing_id`, `commitment`, `bid_amount`, `salt`, `deposit` | Private sealed bid record. Same commit-reveal pattern as auction BidCommitment. |
 
-```leo
-mapping second_highest_bid: field => u64;     // For Vickrey auctions
-mapping second_highest_bidder: field => address;
-mapping dutch_current_price: field => u64;    // Current Dutch auction price
-mapping reserve_met: field => bool;           // Whether reserve price was met
-```
+### Transitions
 
-### Vickrey Auction Transitions
+| Transition | Visibility | Description |
+|------------|------------|-------------|
+| `create_listing` | Public | Seller specifies listing_id, collection_id, token_id, min_price, buy_now_price (0 to disable), and commit/reveal durations. Finalize stores the `Listing` struct in the `listings` mapping. |
+| `place_nft_bid` | Private + Public | Sealed bid on a listing. Generates a BHP256 commitment hash from (bid_amount, salt, listing_id). Calls `credits.aleo/transfer_public_as_signer` to lock the deposit. Returns an `NFTBid` record. Finalize checks listing is active and in commit phase, stores the commitment, and increments bid count. |
+| `reveal_nft_bid` | Private → Public | Same pattern as auction reveal. Bidder provides the `NFTBid` record, bid_amount, and salt. Contract re-hashes and verifies against the stored commitment. Finalize checks timing, updates `nft_highest_bid` / `nft_highest_bidder` if this is the new leader. |
+| `settle_listing` | Public | Callable after reveal deadline. Calls `credits.aleo/transfer_public` to send the winning bid to the seller. Finalize updates listing status to settled (1) with the winner. |
+| `claim_nft_refund` | Private | Non-winners consume their `NFTBid` record. Calls `credits.aleo/transfer_public` to return the deposit. Finalize checks listing is settled, caller is not winner, and refund hasn't been claimed. |
+| `buy_now` | Public | Instant purchase at the buy_now_price. Calls `credits.aleo/transfer_public_as_signer` to pay the seller directly. Finalize checks listing is active, buy_now_price > 0, submitted price matches exactly, and marks listing as settled with buyer as winner. |
 
-```leo
-// Settlement calculates second-highest bid
-async function finalize_settle_vickrey(auction_id: field) {
-    let auction: AuctionV2 = Mapping::get(auctions_v2, auction_id);
-    let winner: address = Mapping::get(highest_bidder, auction_id);
-    let winning_bid: u64 = Mapping::get(highest_bid, auction_id);
-    let second_bid: u64 = Mapping::get(second_highest_bid, auction_id);
+### Mappings
 
-    // Winner pays second-highest price (or min_bid if only one bidder)
-    let payment: u64 = second_bid > 0u64 ? second_bid : auction.min_bid;
-
-    let settled: AuctionV2 = AuctionV2 {
-        ...auction,
-        status: 2u8,
-        winner: winner,
-        winning_bid: winning_bid,
-        payment_amount: payment,  // Pay second price
-    };
-    Mapping::set(auctions_v2, auction_id, settled);
-}
-```
-
-### Dutch Auction Transitions
-
-```leo
-async transition dutch_buy(
-    public auction_id: field,
-) -> Future {
-    return finalize_dutch_buy(auction_id, self.caller);
-}
-
-async function finalize_dutch_buy(auction_id: field, buyer: address) {
-    let auction: AuctionV2 = Mapping::get(auctions_v2, auction_id);
-    assert(auction.auction_type == 2u8); // Dutch
-    assert(auction.status == 0u8);       // Still active
-
-    // Calculate current price based on block height
-    let elapsed: u32 = block.height - auction.commit_deadline; // Start block
-    let decrement: u64 = auction.price_decrement * (elapsed as u64);
-    let current_price: u64 = auction.starting_price - decrement;
-
-    // Ensure price hasn't dropped below minimum
-    assert(current_price >= auction.min_bid);
-
-    // Immediate settlement
-    let settled: AuctionV2 = AuctionV2 {
-        ...auction,
-        status: 2u8,
-        winner: buyer,
-        winning_bid: current_price,
-        payment_amount: current_price,
-    };
-    Mapping::set(auctions_v2, auction_id, settled);
-}
-```
-
-### Reverse Auction Transitions
-
-```leo
-// Lowest bid wins for procurement scenarios
-async function finalize_settle_reverse(auction_id: field) {
-    let auction: AuctionV2 = Mapping::get(auctions_v2, auction_id);
-    let winner: address = Mapping::get(lowest_bidder, auction_id);
-    let winning_bid: u64 = Mapping::get(lowest_bid, auction_id);
-
-    let settled: AuctionV2 = AuctionV2 {
-        ...auction,
-        status: 2u8,
-        winner: winner,
-        winning_bid: winning_bid,
-        payment_amount: winning_bid,
-    };
-    Mapping::set(auctions_v2, auction_id, settled);
-}
-```
+| Mapping | Key → Value | Purpose |
+|---------|-------------|---------|
+| `listings` | `field => Listing` | listing_id → Listing struct |
+| `nft_bid_count` | `field => u32` | listing_id → number of bids |
+| `nft_commitments` | `field => bool` | commitment hash → exists (prevents duplicates) |
+| `nft_highest_bid` | `field => u64` | listing_id → highest revealed bid |
+| `nft_highest_bidder` | `field => address` | listing_id → highest bidder address |
+| `nft_refund_claimed` | `field => bool` | commitment hash → refund claimed |
 
 ---
 
@@ -138,57 +60,41 @@ async function finalize_settle_reverse(auction_id: field) {
 
 ### New Components
 
-| Component | Description |
-|-----------|-------------|
-| `AuctionTypeSelector.jsx` | Choose auction format when creating |
-| `VickreyExplainer.jsx` | Explains second-price mechanism |
-| `DutchPriceDisplay.jsx` | Real-time descending price ticker |
-| `DutchBuyButton.jsx` | One-click buy at current price |
-| `ReverseAuctionCard.jsx` | Card styled for procurement auctions |
-| `ReservePriceInput.jsx` | Optional hidden reserve price |
-| `AuctionTypeFilter.jsx` | Filter auctions by type |
+| Component | File Path | Description |
+|-----------|-----------|-------------|
+| NFTCard | `components/NFTCard.jsx` | Card showing NFT preview, collection name, current price, bid count, status |
+| NFTList | `components/NFTList.jsx` | Grid of listed NFTs with collection and price filters |
+| CreateListingForm | `components/CreateListingForm.jsx` | Form for listing an NFT — collection ID, token ID, min price, buy-now price |
+| NFTBidDialog | `components/NFTBidDialog.jsx` | Modal for placing sealed bid on an NFT listing |
+| NFTDetailDialog | `components/NFTDetailDialog.jsx` | Full listing detail with NFT preview, bid info, and action buttons |
+| BuyNowButton | `components/BuyNowButton.jsx` | One-click instant purchase at buy-now price |
+| NFTImagePreview | `components/NFTImagePreview.jsx` | Image/media preview component for NFT listings |
+| NFTRevealBidDialog | `components/NFTRevealBidDialog.jsx` | Modal for revealing NFT bids (same pattern as auction reveal) |
 
-### Auction Type UX
+### Transaction Builders (`lib/nft.js`)
 
-#### First-Price (Default)
-- Standard sealed-bid flow
-- Highest bid wins, pays bid amount
-- Best for: Most general auctions
+New file with six builder functions: `buildCreateListingInputs`, `buildPlaceNFTBidInputs`, `buildRevealNFTBidInputs`, `buildSettleListingInputs`, `buildClaimNFTRefundInputs`, and `buildBuyNowInputs`. Same pattern as `lib/aleo.js`.
 
-#### Vickrey (Second-Price)
-- Sealed-bid with twist
-- Highest bid wins, pays second-highest amount
-- Encourages truthful bidding
-- Best for: Art, collectibles, unique items
+### New Store (`store/nftStore.js`)
 
-#### Dutch (Descending)
-- Price starts high, decreases over time
-- First person to buy wins at current price
-- No sealed bids needed
-- Best for: Quick sales, perishable items, liquidations
+Zustand store with state fields (`listings`, `isListing`, `isBidding`, `isRevealing`, `isBuying`) and actions (`fetchListings`, `getActiveListings`, `getListingsByCollection`, `createListing`, `placeNFTBid`, `revealNFTBid`, `buyNow`, `claimRefund`).
 
-#### Reverse (Procurement)
-- Lowest bid wins
-- For buyers seeking service providers
-- Best for: Freelance work, contracts, procurement
+### Page Update (`pages/nft.js`)
 
-### UI Updates
+Replace the "Coming Soon" placeholder with full marketplace UI:
+- NFT grid with collection filters and price range
+- Create Listing button (for sellers)
+- NFT detail view on card click with bid/buy actions
+- "My Listings" and "My Bids" tabs for user-specific views
+- Buy Now button for instant purchases
 
-1. **Create Auction Page**
-   - Auction type selection with explanations
-   - Type-specific parameters (starting price, decrement rate)
-   - Reserve price option
+### Constants Update (`lib/constants.js`)
 
-2. **Auction Cards**
-   - Visual differentiation by type
-   - Type-specific action buttons
-   - Dutch: Live price ticker
+Add `NFT: "aloe_nft_v1.aleo"` to the `PROGRAMS` object. Add `LISTING_STATUS` enum (ACTIVE=0, SETTLED=1, CANCELLED=2).
 
-3. **Auction Detail**
-   - Type-specific flows
-   - Vickrey: "You pay second-highest price" notice
-   - Dutch: Countdown with price display
-   - Reverse: "Lowest bid wins" indicator
+### Dashboard Integration
+
+Add NFT activity data to the `activityStore.js` (created in Wave 3). The activity dashboard (`/my-activity`) now shows auction, OTC, launch, and NFT activity in its feed and summary cards.
 
 ---
 
@@ -196,42 +102,49 @@ async function finalize_settle_reverse(auction_id: field) {
 
 | Feature | Privacy Impact |
 |---------|----------------|
-| Vickrey privacy | Bids sealed; winner only sees second price |
-| Dutch timing privacy | No one knows who's watching the price |
-| Reverse bid privacy | Vendors' pricing strategies stay hidden |
-| Reserve price hidden | Minimum acceptable price not revealed |
+| Sealed NFT bids | Bid amounts hidden during commit phase — prevents last-second sniping |
+| Private bid records | NFTBid records encrypted — only bidder knows their bid amount |
+| Portfolio privacy | Sellers' NFT holdings not exposed by browsing listings |
+| Hidden bid counts (per bidder) | Cannot tell how many NFTs a single address is bidding on |
+| Buy-now privacy | Instant purchase reveals price but hides buyer identity until settlement |
 
-**Privacy Score Contribution:** High — Different auction types enable privacy-preserving mechanisms for various market structures.
+**Privacy Score:** High — Solves bid sniping on NFT auctions while maintaining portfolio privacy for sellers.
 
 ---
 
 ## Testing Checklist
 
-### Vickrey Auction
-- [ ] Winner determined by highest bid
-- [ ] Winner pays second-highest amount
-- [ ] Single bidder pays minimum bid
-- [ ] Refund difference to winner (bid - payment)
-- [ ] Privacy maintained until reveal
+### Create Listing
+- [ ] Seller can create a listing with valid parameters
+- [ ] Listing stored in `listings` mapping
+- [ ] Buy-now price correctly set (or 0 for auction-only)
+- [ ] Cannot create listing with min_price = 0
 
-### Dutch Auction
-- [ ] Price decreases correctly over time
-- [ ] First buyer wins at current price
-- [ ] Cannot buy below minimum price
-- [ ] Immediate settlement on purchase
-- [ ] Price display updates in real-time
+### Place NFT Bid
+- [ ] Bidder can place sealed bid during commit phase
+- [ ] Commitment hash correctly generated
+- [ ] Deposit locked via credits.aleo
+- [ ] NFTBid record returned to bidder
+- [ ] Cannot bid below min_price (deposit check)
 
-### Reverse Auction
-- [ ] Lowest bid wins
-- [ ] Bids sealed until reveal
-- [ ] Auctioneer pays winner
-- [ ] Multiple bidders handled correctly
+### Reveal NFT Bid
+- [ ] Can reveal with correct salt during reveal phase
+- [ ] Cannot reveal with wrong salt
+- [ ] Highest bid tracked correctly
+- [ ] Cannot reveal outside reveal phase
 
-### Reserve Price
-- [ ] Reserve price hidden from bidders
-- [ ] Auction fails if reserve not met
-- [ ] Items returned if no valid bids
-- [ ] Reserve revealed after auction ends
+### Buy Now
+- [ ] Can buy at exact buy-now price
+- [ ] Credits transferred to seller
+- [ ] Listing status set to settled
+- [ ] Cannot buy-now if no buy-now price set
+- [ ] Cannot buy-now on already-settled listing
+
+### Settle / Refund
+- [ ] Listing settles with highest bidder as winner
+- [ ] Non-winners can claim refund
+- [ ] Winner cannot claim refund
+- [ ] Cannot claim refund twice
 
 ---
 
@@ -239,42 +152,20 @@ async function finalize_settle_reverse(auction_id: field) {
 
 | Metric | Target |
 |--------|--------|
-| Auction types available | 4 types fully functional |
-| Vickrey accuracy | Correct second-price calculation |
-| Dutch price updates | Real-time (< 1s latency) |
-| Type-specific UX | Clear differentiation |
-| Reserve price privacy | 100% hidden until settlement |
+| Listing flow | Full create → bid → reveal → settle working |
+| Buy-now flow | Instant purchase fully functional |
+| Bid privacy | Bid amounts invisible on-chain during commit phase |
+| Escrow accuracy | 100% of deposits locked and released correctly |
+| NFT display | Collection and token metadata render correctly |
 
 ---
 
-## Use Case Examples
+## Demo Scenarios
 
-### Vickrey: Art Auction
-> "I'm auctioning a rare digital artwork. Vickrey encourages bidders to bid their true value since they'll only pay the second price."
-
-### Dutch: Flash Sale
-> "I want to sell 100 tokens quickly. Start at 10 credits, drop 0.1 credits per block until someone buys."
-
-### Reverse: Freelance Bidding
-> "I need a smart contract audit. Vendors submit sealed bids, lowest qualified bid wins the contract."
-
-### First-Price with Reserve
-> "Auctioning my NFT with a hidden reserve of 500 credits. If no one bids above that, I keep the NFT."
-
----
-
-## Educational Content
-
-### In-App Explanations
-- Tooltip explaining each auction type
-- "How Vickrey works" modal
-- "Why bid truthfully?" explainer
-- Dutch auction tutorial animation
-
-### Documentation
-- Detailed mechanism descriptions
-- When to use each type
-- Strategy guides for bidders
+1. **Sealed-Bid NFT Sale**: Seller lists NFT (min 50 credits) → 3 bidders place sealed bids → Reveal phase → Highest bid wins → Seller receives credits → Losers refunded
+2. **Buy Now**: Seller lists NFT with buy-now at 200 credits → Buyer clicks Buy Now → Instant transfer → Listing closed
+3. **No Bids**: Seller lists NFT → No bids placed → Seller cancels listing
+4. **Mixed**: Listing has both bids and a buy-now price → Someone buys now before reveal → Existing bidders refunded
 
 ---
 
