@@ -14,7 +14,7 @@ export default function App({ Component, pageProps }) {
     <>
       <Head>
         <link rel="icon" href="/logo-removebg-preview.png" />
-        <title>Aloe | Private Exchange Protocol</title>
+        <title>Aloe | Privacy-Preserving Auction Primitive</title>
       </Head>
       <WalletProvider>
         <Component {...pageProps} />
