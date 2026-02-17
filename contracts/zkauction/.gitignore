@@ -1,5 +1,6 @@
 # Environment file with private key
 .env
+!.env.example
 
 # Build artifacts
 build/
