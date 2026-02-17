@@ -22,6 +22,10 @@ export const useAuctionStore = create(
       isLoading: false,
       isCreating: false,
       isBidding: false,
+      isRevealing: false,
+      isSettling: false,
+      isClaiming: false,
+      isCancelling: false,
 
       // Error state
       error: null,
@@ -81,6 +85,18 @@ export const useAuctionStore = create(
        */
       setBidding: (isBidding) => set({ isBidding }),
 
+      /** Set revealing state (for reveal bid) */
+      setRevealing: (isRevealing) => set({ isRevealing }),
+
+      /** Set settling state (for settle auction) */
+      setSettling: (isSettling) => set({ isSettling }),
+
+      /** Set claiming state (for claim refund) */
+      setClaiming: (isClaiming) => set({ isClaiming }),
+
+      /** Set cancelling state (for cancel auction) */
+      setCancelling: (isCancelling) => set({ isCancelling }),
+
       /**
        * Set error state
        */
@@ -136,6 +152,10 @@ export const useAuctionStore = create(
           isLoading: false,
           isCreating: false,
           isBidding: false,
+          isRevealing: false,
+          isSettling: false,
+          isClaiming: false,
+          isCancelling: false,
           error: null,
           selectedAuction: null,
         }),
