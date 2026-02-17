@@ -10,18 +10,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
 import {
   formatCredits,
   formatBlockDuration,
   truncateAddress,
 } from "@/lib/aleo";
-import {
-  AUCTION_STATUS_LABELS,
-  AUCTION_STATUS_COLORS,
-  AUCTION_STATUS,
-} from "@/lib/constants";
+import { AUCTION_STATUS } from "@/lib/constants";
 import { Clock, Users, Gavel, ArrowRight } from "lucide-react";
 
 /**
@@ -42,10 +38,6 @@ export function AuctionCard({ auction, onSelect, onBid, index = 0 }) {
     createdAt,
   } = auction;
 
-  // Get status display properties
-  const statusLabel = AUCTION_STATUS_LABELS[status] || "Unknown";
-  const statusColor = AUCTION_STATUS_COLORS[status] || "secondary";
-
   // Determine if bidding is available
   const canBid = status === AUCTION_STATUS.COMMIT_PHASE;
 
@@ -65,7 +57,7 @@ export function AuctionCard({ auction, onSelect, onBid, index = 0 }) {
         <CardHeader className="p-4 md:p-6 pb-3">
           <div className="flex items-start justify-between gap-2">
             <CardTitle className="line-clamp-1 text-lg">{itemName}</CardTitle>
-            <Badge variant={statusColor}>{statusLabel}</Badge>
+            <AuctionStatusBadge status={status} />
           </div>
           <CardDescription className="line-clamp-1">
             by {truncateAddress(auctioneer)}
@@ -113,6 +105,11 @@ export function AuctionCard({ auction, onSelect, onBid, index = 0 }) {
           {canBid && onBid && (
             <Button className="flex-1" onClick={() => onBid(auction)}>
               Place Bid
+            </Button>
+          )}
+          {!canBid && status === AUCTION_STATUS.REVEAL_PHASE && onSelect && (
+            <Button className="flex-1" variant="outline" onClick={() => onSelect(auction)}>
+              Reveal Bid
             </Button>
           )}
           {onSelect && (
