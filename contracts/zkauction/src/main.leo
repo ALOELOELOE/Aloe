@@ -5,7 +5,7 @@
 // Import credits.aleo for real credit transfers (escrow deposits)
 import credits.aleo;
 
-program aloe_auction_v3.aleo {
+program aloe_auction_v4.aleo {
 
     // ============================================
     // CONSTRUCTOR (required for deployment)
@@ -48,16 +48,6 @@ program aloe_auction_v3.aleo {
         deposit: u64,             // Deposit amount (must be >= bid_amount)
     }
 
-    // Private record for a revealed bid - proves the bidder revealed (needed for refund)
-    // Created during the reveal phase when a bidder opens their sealed bid
-    record RevealedBid {
-        owner: address,           // Bidder's address
-        auction_id: field,        // Which auction this bid is for
-        commitment: field,        // The original commitment hash
-        bid_amount: u64,          // The revealed bid amount
-        deposit: u64,             // The deposit amount held in escrow
-    }
-
     // ============================================
     // MAPPINGS (Public on-chain state)
     // ============================================
@@ -85,6 +75,15 @@ program aloe_auction_v3.aleo {
 
     // commitment hash => whether refund has been claimed
     mapping refund_claimed: field => bool;
+
+    // commitment hash => whether bid has been revealed (for record-free refund flow)
+    mapping has_revealed: field => bool;
+
+    // commitment hash => deposit amount (stored during reveal for refund verification)
+    mapping revealed_deposits: field => u64;
+
+    // commitment hash => bidder address (stored during reveal for refund verification)
+    mapping revealed_bidder: field => address;
 
     // ============================================
     // TRANSITIONS
@@ -255,49 +254,44 @@ program aloe_auction_v3.aleo {
     // REVEAL PHASE
     // ============================================
 
-    // Reveal a previously committed bid
-    // Consumes the BidCommitment record and returns a RevealedBid record
+    // Reveal a previously committed bid using raw field inputs (no record needed)
+    // Wallets don't reliably index custom program records, so we accept raw data
+    // and recompute the commitment hash on-chain for verification
     // Only callable during the reveal phase (after commit_deadline, before reveal_deadline)
     async transition reveal_bid(
-        private bid_record: BidCommitment
-    ) -> (RevealedBid, Future) {
-        // Re-compute commitment hash to verify it matches
-        let computed_commitment: field = BHP256::hash_to_field(
+        public auction_id: field,         // Which auction this bid is for
+        bid_amount: u64,                  // Private bid amount (from local storage)
+        salt: field,                      // Private salt (from local storage)
+        public deposit: u64               // Public deposit amount
+    ) -> Future {
+        // Re-compute commitment hash from raw inputs
+        let commitment: field = BHP256::hash_to_field(
             CommitmentData {
-                bid_amount: bid_record.bid_amount,
-                salt: bid_record.salt,
-                auction_id: bid_record.auction_id,
+                bid_amount: bid_amount,
+                salt: salt,
+                auction_id: auction_id,
             }
         );
 
-        // Assert the commitment matches (proves the bid data is genuine)
-        assert_eq(computed_commitment, bid_record.commitment);
+        // Deposit must cover the bid
+        assert(deposit >= bid_amount);
 
-        // Deposit must cover bid (should already be true from place_bid, but verify)
-        assert(bid_record.deposit >= bid_record.bid_amount);
-
-        // Create RevealedBid record — proves this bidder revealed (needed for refund)
-        let revealed: RevealedBid = RevealedBid {
-            owner: bid_record.owner,
-            auction_id: bid_record.auction_id,
-            commitment: bid_record.commitment,
-            bid_amount: bid_record.bid_amount,
-            deposit: bid_record.deposit,
-        };
-
-        return (revealed, finalize_reveal_bid(
-            bid_record.auction_id,
-            bid_record.commitment,
-            bid_record.bid_amount,
-            bid_record.owner
-        ));
+        return finalize_reveal_bid(
+            auction_id,
+            commitment,
+            bid_amount,
+            deposit,
+            self.caller
+        );
     }
 
-    // Finalize reveal - checks timing and updates highest bid tracking
+    // Finalize reveal - checks timing, prevents double-reveal, updates highest bid,
+    // and stores bidder info in mappings for later refund claims
     async function finalize_reveal_bid(
         auction_id: field,
         commitment: field,
         bid_amount: u64,
+        deposit: u64,
         bidder: address
     ) {
         // Get auction and verify state
@@ -311,6 +305,15 @@ program aloe_auction_v3.aleo {
         // Verify this commitment exists (was actually placed)
         let commitment_exists: bool = Mapping::get(commitments, commitment);
         assert(commitment_exists);
+
+        // Prevent double-reveal — each commitment can only be revealed once
+        let already_revealed: bool = Mapping::contains(has_revealed, commitment);
+        assert(!already_revealed);
+
+        // Mark as revealed and store deposit + bidder for refund flow
+        Mapping::set(has_revealed, commitment, true);
+        Mapping::set(revealed_deposits, commitment, deposit);
+        Mapping::set(revealed_bidder, commitment, bidder);
 
         // Update highest bid if this is the new leader
         let current_highest: u64 = Mapping::get(highest_bid, auction_id);
@@ -394,31 +397,47 @@ program aloe_auction_v3.aleo {
         Mapping::set(auctions, auction_id, settled_auction);
     }
 
-    // Claim a refund for a non-winning revealed bid
+    // Claim a refund for a non-winning revealed bid using raw field inputs (no record needed)
+    // Recomputes commitment hash from raw data (same as reveal_bid pattern)
     // Only revealed bidders can claim (unrevealed bids forfeit their deposit)
     // Only non-winners can claim (winner's deposit goes to auctioneer)
     async transition claim_refund(
-        private bid_record: RevealedBid
+        public auction_id: field,         // Which auction to claim from
+        bid_amount: u64,                  // Private bid amount (from local storage)
+        salt: field,                      // Private salt (from local storage)
+        public deposit: u64               // Public deposit amount to refund
     ) -> Future {
-        // Transfer deposit back to bidder from program's public balance
+        // Recompute commitment hash from raw inputs (avoids needing BHP256 in JS)
+        let commitment: field = BHP256::hash_to_field(
+            CommitmentData {
+                bid_amount: bid_amount,
+                salt: salt,
+                auction_id: auction_id,
+            }
+        );
+
+        // Transfer deposit back to caller from program's public balance
         let transfer_future: Future = credits.aleo/transfer_public(
-            bid_record.owner,
-            bid_record.deposit
+            self.caller,
+            deposit
         );
 
         return finalize_claim_refund(
-            bid_record.auction_id,
-            bid_record.commitment,
-            bid_record.owner,
+            auction_id,
+            commitment,
+            deposit,
+            self.caller,
             transfer_future
         );
     }
 
-    // Finalize refund - verifies auction is settled and bidder is not the winner
+    // Finalize refund - verifies auction settled, bid revealed, caller is original bidder,
+    // deposit matches, caller is not winner, and refund not already claimed
     async function finalize_claim_refund(
         auction_id: field,
         commitment: field,
-        bidder: address,
+        deposit: u64,
+        caller: address,
         transfer_future: Future
     ) {
         // Await the credit transfer
@@ -428,8 +447,20 @@ program aloe_auction_v3.aleo {
         let auction: Auction = Mapping::get(auctions, auction_id);
         assert_eq(auction.status, 3u8); // Must be Ended
 
+        // Verify this commitment was revealed (only revealed bidders can claim)
+        let was_revealed: bool = Mapping::get(has_revealed, commitment);
+        assert(was_revealed);
+
+        // Verify caller is the original bidder who revealed
+        let original_bidder: address = Mapping::get(revealed_bidder, commitment);
+        assert_eq(caller, original_bidder);
+
+        // Verify deposit matches what was stored during reveal
+        let stored_deposit: u64 = Mapping::get(revealed_deposits, commitment);
+        assert_eq(deposit, stored_deposit);
+
         // Only non-winners can claim refund
-        assert_neq(bidder, auction.winner);
+        assert_neq(caller, auction.winner);
 
         // Check refund hasn't already been claimed for this commitment
         let already_claimed: bool = Mapping::contains(refund_claimed, commitment);
