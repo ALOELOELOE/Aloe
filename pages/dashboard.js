@@ -137,6 +137,7 @@ export default function Dashboard() {
           <AuctionList
             onSelect={handleSelectAuction}
             onBid={handleBidClick}
+            currentBlock={currentBlock}
           />
         </motion.section>
       </main>
