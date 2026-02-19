@@ -13,6 +13,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ShieldCreditsDialog } from "@/components/ShieldCreditsDialog";
 import { truncateAddress, formatCredits } from "@/lib/aleo";
 import { ALEO_API_URL, NETWORK } from "@/lib/constants";
 import {
@@ -24,6 +25,7 @@ import {
   Check,
   RefreshCw,
   Eye,
+  ShieldCheck,
 } from "lucide-react";
 
 /**
@@ -47,6 +49,9 @@ export function WalletConnect() {
 
   // Copy-to-clipboard feedback
   const [copied, setCopied] = useState(false);
+
+  // Shield credits dialog state
+  const [shieldDialogOpen, setShieldDialogOpen] = useState(false);
 
   // Log wallet state changes
   console.log("[Aloe:Wallet] State:", {
@@ -209,6 +214,7 @@ export function WalletConnect() {
   // Show connected state with popover dropdown
   if (connected && address) {
     return (
+    <>
       <Popover open={open} onOpenChange={handleOpenChange}>
         {/* Trigger — clickable address area */}
         <PopoverTrigger asChild>
@@ -315,6 +321,20 @@ export function WalletConnect() {
               </div>
             </div>
 
+            {/* Shield Credits — convert public to private for bidding */}
+            <Button
+              variant="default"
+              size="sm"
+              className="w-full gap-2"
+              onClick={() => {
+                setOpen(false); // close popover before opening dialog
+                setShieldDialogOpen(true);
+              }}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Shield Credits
+            </Button>
+
             {/* Disconnect button */}
             <Button
               variant="outline"
@@ -328,6 +348,19 @@ export function WalletConnect() {
           </div>
         </PopoverContent>
       </Popover>
+
+      {/* Shield Credits Dialog — opened from the dropdown */}
+      <ShieldCreditsDialog
+        open={shieldDialogOpen}
+        onOpenChange={setShieldDialogOpen}
+        onSuccess={() => {
+          // Refresh public balance after shielding (it will decrease)
+          refreshPublicBalance();
+          // Reset private balance so user can re-reveal to see updated amount
+          setPrivateBalance(null);
+        }}
+      />
+    </>
     );
   }
 
