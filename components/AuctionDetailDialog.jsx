@@ -1,7 +1,7 @@
 // Auction Detail Dialog
 // Full-featured auction detail view with phase-aware action buttons
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import {
   Dialog,
@@ -24,8 +24,10 @@ import {
   parseCreditsToMicro,
   findCreditsRecord,
   truncateAddress,
+  isRealTransaction,
+  fetchAuctionOnChain,
 } from "@/lib/aleo";
-import { AUCTION_STATUS } from "@/lib/constants";
+import { AUCTION_STATUS, BLOCK_TIME_SECONDS } from "@/lib/constants";
 import { useAuctionStore } from "@/store/auctionStore";
 import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
 import { AuctionTimer } from "@/components/AuctionTimer";
@@ -64,19 +66,51 @@ export function AuctionDetailDialog({
   const [shieldDialogOpen, setShieldDialogOpen] = useState(false);
   const [shieldSuggestedAmount, setShieldSuggestedAmount] = useState(0);
 
+  // On-chain deadline state — fetched from Aleo API (source of truth for phase detection)
+  const [onChainData, setOnChainData] = useState(null);
+
+  // Fetch actual deadlines from on-chain when dialog opens and periodically refresh
+  const refreshOnChainData = useCallback(async () => {
+    if (!auction?.id) return;
+    const data = await fetchAuctionOnChain(auction.id);
+    if (data) {
+      console.log("[Aloe:AuctionDetailDialog] On-chain data:", data);
+      setOnChainData(data);
+    }
+  }, [auction?.id]);
+
+  useEffect(() => {
+    if (!open || !auction?.id) {
+      setOnChainData(null);
+      return;
+    }
+    // Fetch immediately on open
+    refreshOnChainData();
+    // Refresh every block to keep phase detection accurate
+    const interval = setInterval(refreshOnChainData, BLOCK_TIME_SECONDS * 1000);
+    return () => clearInterval(interval);
+  }, [open, auction?.id, refreshOnChainData]);
+
   if (!auction) return null;
 
-  // Determine current phase based on block height
+  // Use on-chain deadlines (source of truth) — fall back to local estimates only if not fetched yet
+  const commitDeadline = onChainData?.commitDeadline ?? auction.commitDeadline ?? null;
+  const revealDeadline = onChainData?.revealDeadline ?? auction.revealDeadline ?? null;
+
+  // Determine current phase based on block height and ON-CHAIN deadlines
+  // Without on-chain data or block height, default to commit phase (safest — prevents premature actions)
   const isCommitPhase =
     auction.status === AUCTION_STATUS.COMMIT_PHASE &&
-    (!currentBlock || currentBlock <= auction.commitDeadline);
+    (!currentBlock || !commitDeadline || currentBlock <= commitDeadline);
   const isRevealPhase =
     auction.status === AUCTION_STATUS.COMMIT_PHASE &&
-    currentBlock > auction.commitDeadline &&
-    currentBlock <= auction.revealDeadline;
+    currentBlock && commitDeadline && revealDeadline &&
+    currentBlock > commitDeadline &&
+    currentBlock <= revealDeadline;
   const isPastReveal =
     auction.status === AUCTION_STATUS.COMMIT_PHASE &&
-    currentBlock > auction.revealDeadline;
+    currentBlock && revealDeadline &&
+    currentBlock > revealDeadline;
   const isEnded = auction.status === AUCTION_STATUS.ENDED;
   const isAuctioneer = address === auction.auctioneer;
 
@@ -130,8 +164,16 @@ export function AuctionDetailDialog({
       });
       const txId = result?.transactionId;
 
-      // Store bid locally for later reveal
-      storeBidLocally(auction.id, bidMicro.toString(), txInputs.metadata.salt);
+      // Warn if the wallet returned a simulated (non-on-chain) transaction ID
+      if (!isRealTransaction(txId)) {
+        toast.warning("Transaction may not be on-chain", {
+          description: "Your wallet may be in simulation mode. Switch Proving Mode to 'Local' in wallet settings.",
+          duration: 8000,
+        });
+      }
+
+      // Store bid locally for later reveal and refund (includes deposit for v4 contract)
+      storeBidLocally(auction.id, bidMicro.toString(), txInputs.metadata.salt, bidMicro.toString());
 
       // Update local auction state
       updateAuction(auction.id, {
@@ -176,6 +218,14 @@ export function AuctionDetailDialog({
       });
       const txId = result?.transactionId;
 
+      // Warn if the wallet returned a simulated (non-on-chain) transaction ID
+      if (!isRealTransaction(txId)) {
+        toast.warning("Transaction may not be on-chain", {
+          description: "Your wallet may be in simulation mode. Switch Proving Mode to 'Local' in wallet settings.",
+          duration: 8000,
+        });
+      }
+
       updateAuction(auction.id, { status: AUCTION_STATUS.CANCELLED });
 
       console.log("[Aloe:AuctionDetailDialog] Auction cancelled, tx:", txId);
@@ -202,8 +252,8 @@ export function AuctionDetailDialog({
               <DialogTitle>{auction.itemName}</DialogTitle>
               <AuctionStatusBadge
                 status={auction.status}
-                commitDeadline={auction.commitDeadline}
-                revealDeadline={auction.revealDeadline}
+                commitDeadline={commitDeadline}
+                revealDeadline={revealDeadline}
                 currentBlock={currentBlock}
               />
             </div>
@@ -231,8 +281,8 @@ export function AuctionDetailDialog({
               {/* Timer */}
               <AuctionTimer
                 status={auction.status}
-                commitDeadline={auction.commitDeadline}
-                revealDeadline={auction.revealDeadline}
+                commitDeadline={commitDeadline}
+                revealDeadline={revealDeadline}
                 currentBlock={currentBlock}
               />
             </div>

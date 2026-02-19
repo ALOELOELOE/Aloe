@@ -21,6 +21,7 @@ import {
   buildCreateAuctionInputs,
   parseCreditsToMicro,
   formatBlockDuration,
+  isRealTransaction,
 } from "@/lib/aleo";
 import {
   DEFAULT_COMMIT_DURATION,
@@ -72,13 +73,15 @@ export function CreateAuctionForm({ onSuccess }) {
     const commitBlocks = parseInt(commitDuration);
     const revealBlocks = parseInt(revealDuration);
 
-    if (isNaN(commitBlocks) || commitBlocks < 10) {
-      toast.error("Commit duration must be at least 10 blocks");
+    // Minimum 20 blocks (~1 minute at 3s/block) gives users enough time
+    // to submit transactions before the phase window closes
+    if (isNaN(commitBlocks) || commitBlocks < 20) {
+      toast.error("Commit duration must be at least 20 blocks (~1 min)");
       return;
     }
 
-    if (isNaN(revealBlocks) || revealBlocks < 10) {
-      toast.error("Reveal duration must be at least 10 blocks");
+    if (isNaN(revealBlocks) || revealBlocks < 20) {
+      toast.error("Reveal duration must be at least 20 blocks (~1 min)");
       return;
     }
 
@@ -142,6 +145,14 @@ export function CreateAuctionForm({ onSuccess }) {
 
       console.log("[Aloe] ✅ Transaction submitted successfully!");
       console.log("[Aloe] Transaction ID:", txId);
+
+      // Warn if the wallet returned a simulated (non-on-chain) transaction ID
+      if (!isRealTransaction(txId)) {
+        toast.warning("Transaction may not be on-chain", {
+          description: "Your wallet may be in simulation mode. Switch Proving Mode to 'Local' in wallet settings.",
+          duration: 8000,
+        });
+      }
 
       // Add auction to local store for display
       // In production, this would be fetched from chain
@@ -250,8 +261,8 @@ export function CreateAuctionForm({ onSuccess }) {
             <Input
               id="commitDuration"
               type="number"
-              min="10"
-              placeholder="360"
+              min="20"
+              placeholder="1200"
               value={commitDuration}
               onChange={(e) => setCommitDuration(e.target.value)}
               disabled={isCreating}
@@ -271,8 +282,8 @@ export function CreateAuctionForm({ onSuccess }) {
             <Input
               id="revealDuration"
               type="number"
-              min="10"
-              placeholder="180"
+              min="20"
+              placeholder="600"
               value={revealDuration}
               onChange={(e) => setRevealDuration(e.target.value)}
               disabled={isCreating}

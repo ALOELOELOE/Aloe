@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { buildShieldCreditsInputs, parseCreditsToMicro } from "@/lib/aleo";
+import { buildShieldCreditsInputs, parseCreditsToMicro, isRealTransaction } from "@/lib/aleo";
 
 /**
  * Dialog to convert public credits into a private credits record
@@ -68,6 +68,14 @@ export function ShieldCreditsDialog({ open, onOpenChange, suggestedAmount, onSuc
         privateFee: false,
       });
       const txId = result?.transactionId;
+
+      // Warn if the wallet returned a simulated (non-on-chain) transaction ID
+      if (!isRealTransaction(txId)) {
+        toast.warning("Transaction may not be on-chain", {
+          description: "Your wallet may be in simulation mode. Switch Proving Mode to 'Local' in wallet settings.",
+          duration: 8000,
+        });
+      }
 
       console.log("[Aloe:ShieldCreditsDialog] Shield successful, tx:", txId);
 

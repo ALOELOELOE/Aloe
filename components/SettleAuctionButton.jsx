@@ -5,7 +5,7 @@ import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
-import { buildSettleAuctionInputs } from "@/lib/aleo";
+import { buildSettleAuctionInputs, fetchHighestBid, isRealTransaction, checkSettleEligibility } from "@/lib/aleo";
 import { useAuctionStore } from "@/store/auctionStore";
 
 /**
@@ -28,10 +28,34 @@ export function SettleAuctionButton({ auction, auctioneer, winningAmount, onSett
     console.log("[Aloe:SettleAuctionButton] Settling auction", auction.id);
 
     try {
+      // Pre-flight check: verify the reveal phase is over before submitting
+      // The contract requires block.height > reveal_deadline — this prevents wasting gas
+      const eligibility = await checkSettleEligibility(auction.id);
+      if (!eligibility.ok) {
+        toast.error("Cannot settle yet", {
+          description: eligibility.reason,
+          duration: 8000,
+        });
+        console.log("[Aloe:SettleAuctionButton] Pre-flight check failed:", eligibility);
+        setSettling(false);
+        return;
+      }
+
+      // Fetch the actual highest bid from on-chain mapping (local store may be stale/zero)
+      const onChainHighest = await fetchHighestBid(auction.id);
+      console.log("[Aloe:SettleAuctionButton] On-chain highest bid:", onChainHighest);
+
+      if (onChainHighest <= 0) {
+        toast.error("No revealed bids found on-chain", {
+          description: "This auction has no revealed bids. Use Cancel Auction instead.",
+        });
+        return;
+      }
+
       const txInputs = buildSettleAuctionInputs({
         auctionId: auction.id,
         auctioneer,
-        winningAmount,
+        winningAmount: onChainHighest,
       });
 
       toast.info("Please approve the settle transaction in your wallet...");
@@ -45,6 +69,14 @@ export function SettleAuctionButton({ auction, auctioneer, winningAmount, onSett
         privateFee: false,
       });
       const txId = result?.transactionId;
+
+      // Warn if the wallet returned a simulated (non-on-chain) transaction ID
+      if (!isRealTransaction(txId)) {
+        toast.warning("Transaction may not be on-chain", {
+          description: "Your wallet may be in simulation mode. Switch Proving Mode to 'Local' in wallet settings.",
+          duration: 8000,
+        });
+      }
 
       // Update local state to reflect settlement
       updateAuction(auction.id, { status: 3 }); // Ended
