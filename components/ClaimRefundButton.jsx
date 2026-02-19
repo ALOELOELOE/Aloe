@@ -5,7 +5,7 @@ import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
-import { buildClaimRefundInputs, findRecord } from "@/lib/aleo";
+import { buildClaimRefundInputs, getStoredBid, clearStoredBid, isRealTransaction, checkRefundEligibility } from "@/lib/aleo";
 import { useAuctionStore } from "@/store/auctionStore";
 
 /**
@@ -16,7 +16,7 @@ import { useAuctionStore } from "@/store/auctionStore";
  * @param {Function} [props.onClaimed] - Callback after successful claim
  */
 export function ClaimRefundButton({ auction, onClaimed }) {
-  const { address, executeTransaction, requestRecords } = useWallet();
+  const { address, executeTransaction } = useWallet();
   const { isClaiming, setClaiming } = useAuctionStore();
 
   const handleClaim = async () => {
@@ -26,18 +26,36 @@ export function ClaimRefundButton({ auction, onClaimed }) {
     console.log("[Aloe:ClaimRefundButton] Claiming refund for auction", auction.id);
 
     try {
-      // Find RevealedBid record in the wallet
-      const revealedRecord = await findRecord(requestRecords, "RevealedBid", auction.id);
+      // Pre-flight check: verify auction is settled and caller is not the winner
+      // Prevents wasting gas on transactions the contract will reject
+      const eligibility = await checkRefundEligibility(auction.id, address);
+      if (!eligibility.ok) {
+        toast.error("Cannot claim refund", {
+          description: eligibility.reason,
+          duration: 8000,
+        });
+        console.log("[Aloe:ClaimRefundButton] Pre-flight check failed:", eligibility);
+        setClaiming(false);
+        return;
+      }
 
-      if (!revealedRecord) {
-        toast.error("RevealedBid record not found", {
-          description: "You need to reveal your bid first before claiming a refund.",
+      // Use locally stored bid data instead of wallet record lookup
+      // (Wallets don't reliably index custom program records like RevealedBid)
+      const storedBid = getStoredBid(auction.id);
+
+      if (!storedBid) {
+        toast.error("Bid data not found locally", {
+          description: "Your bid data must be stored in this browser to claim a refund.",
         });
         return;
       }
 
+      // Build the refund transaction from raw fields — contract recomputes commitment on-chain
       const txInputs = buildClaimRefundInputs({
-        revealedBidRecord: revealedRecord,
+        auctionId: auction.id,
+        bidAmount: storedBid.bidAmount,
+        salt: storedBid.salt,
+        deposit: storedBid.deposit || storedBid.bidAmount,
       });
 
       toast.info("Please approve the refund transaction in your wallet...");
@@ -51,6 +69,17 @@ export function ClaimRefundButton({ auction, onClaimed }) {
         privateFee: false,
       });
       const txId = result?.transactionId;
+
+      // Warn if the wallet returned a simulated (non-on-chain) transaction ID
+      if (!isRealTransaction(txId)) {
+        toast.warning("Transaction may not be on-chain", {
+          description: "Your wallet may be in simulation mode. Switch Proving Mode to 'Local' in wallet settings.",
+          duration: 8000,
+        });
+      }
+
+      // Clear stored bid data after successful refund claim
+      clearStoredBid(auction.id);
 
       console.log("[Aloe:ClaimRefundButton] Refund claimed, tx:", txId);
 
