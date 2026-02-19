@@ -47,3 +47,5 @@ contracts/*/outputs/
 
 # claude-mem plugin context files (auto-generated)
 **/CLAUDE.md
+
+.vscode/settings.json
