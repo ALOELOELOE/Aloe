@@ -39,6 +39,10 @@ export function AuctionStatusBadge({
     // Status 1 covers both commit and reveal phases
     // Differentiate by block height if available
     if (status === AUCTION_STATUS.COMMIT_PHASE && currentBlock && commitDeadline) {
+      // Past both deadlines — auction is effectively ended even if status hasn't updated
+      if (revealDeadline && currentBlock > revealDeadline) {
+        return { label: "Ended", variant: "success" };
+      }
       if (currentBlock > commitDeadline) {
         // Past commit deadline — we're in reveal phase
         return { label: "Reveal Phase", variant: "warning" };

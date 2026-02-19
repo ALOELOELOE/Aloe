@@ -9,8 +9,9 @@ import { Package } from "lucide-react";
 /**
  * AuctionList component
  * Renders a grid of auction cards with loading and empty states
+ * @param {number} currentBlock - Current block height for phase detection
  */
-export function AuctionList({ onSelect, onBid, filter = null }) {
+export function AuctionList({ onSelect, onBid, filter = null, currentBlock = null }) {
   const { auctions, isLoading } = useAuctionStore();
 
   // Apply filter if provided
@@ -61,6 +62,7 @@ export function AuctionList({ onSelect, onBid, filter = null }) {
           onSelect={onSelect}
           onBid={onBid}
           index={index}
+          currentBlock={currentBlock}
         />
       ))}
     </div>

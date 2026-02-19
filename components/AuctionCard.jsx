@@ -1,6 +1,7 @@
 // Auction Card component
-// Displays individual auction information
+// Displays individual auction information with on-chain phase detection and bid indicators
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Card,
@@ -11,39 +12,135 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { AuctionStatusBadge } from "@/components/AuctionStatusBadge";
 import {
   formatCredits,
   formatBlockDuration,
   truncateAddress,
+  fetchAuctionOnChain,
+  hasStoredBid,
 } from "@/lib/aleo";
 import { AUCTION_STATUS } from "@/lib/constants";
-import { Clock, Users, Gavel, ArrowRight } from "lucide-react";
+import { Clock, Users, Gavel, ArrowRight, Eye, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+
+/**
+ * Determine the actual auction phase from on-chain deadlines + current block
+ * The contract uses status 1 for the entire active period (commit + reveal).
+ * We differentiate by comparing currentBlock against the deadlines.
+ * @returns {"commit" | "reveal" | "ended" | "unknown"}
+ */
+function getActualPhase(status, currentBlock, commitDeadline, revealDeadline) {
+  // Non-active statuses are straightforward
+  if (status === AUCTION_STATUS.ENDED) return "ended";
+  if (status === AUCTION_STATUS.CANCELLED) return "cancelled";
+  if (status === AUCTION_STATUS.CREATED) return "created";
+
+  // Status 1 (COMMIT_PHASE) covers both commit and reveal on-chain
+  // Need block height + deadlines to differentiate
+  if (!currentBlock || !commitDeadline) return "unknown";
+
+  if (currentBlock <= commitDeadline) return "commit";
+  if (revealDeadline && currentBlock <= revealDeadline) return "reveal";
+  return "ended"; // Past both deadlines
+}
 
 /**
  * AuctionCard component
- * Displays auction preview with key information
+ * Displays auction preview with on-chain phase detection and bid indicators
+ * @param {Object} auction - Auction data from store
+ * @param {Function} onSelect - Click handler for "View Details"
+ * @param {Function} onBid - Click handler for "Place Bid"
  * @param {number} index - Index for staggered animation
+ * @param {number} currentBlock - Current block height from useBlockHeight()
  */
-export function AuctionCard({ auction, onSelect, onBid, index = 0 }) {
+export function AuctionCard({ auction, onSelect, onBid, index = 0, currentBlock = null }) {
   const {
     id,
     itemName,
     auctioneer,
     minBid,
-    commitDuration,
-    revealDuration,
     status,
     bidCount = 0,
-    createdAt,
   } = auction;
 
-  // Determine if bidding is available
-  const canBid = status === AUCTION_STATUS.COMMIT_PHASE;
+  // On-chain deadline state — fetched once on mount
+  const [commitDeadline, setCommitDeadline] = useState(null);
+  const [revealDeadline, setRevealDeadline] = useState(null);
 
-  // Calculate time remaining (simplified - would need block height from chain)
-  const totalBlocks = commitDuration + revealDuration;
-  const durationText = formatBlockDuration(totalBlocks);
+  // Fetch on-chain deadlines once when the card mounts (no polling — cards are in a grid)
+  useEffect(() => {
+    if (!id || status === AUCTION_STATUS.ENDED || status === AUCTION_STATUS.CANCELLED) return;
+
+    let cancelled = false;
+    fetchAuctionOnChain(id).then((data) => {
+      if (cancelled || !data) return;
+      setCommitDeadline(data.commitDeadline);
+      setRevealDeadline(data.revealDeadline);
+    });
+
+    return () => { cancelled = true; };
+  }, [id, status]);
+
+  // Determine actual phase from on-chain data
+  const phase = getActualPhase(status, currentBlock, commitDeadline, revealDeadline);
+
+  // Check if user has a stored bid for this auction
+  const userHasBid = hasStoredBid(id);
+
+  // Calculate remaining blocks for the current phase
+  const getRemainingText = () => {
+    if (!currentBlock) return null;
+
+    if (phase === "commit" && commitDeadline) {
+      const remaining = commitDeadline - currentBlock;
+      return `Commit phase: ${formatBlockDuration(remaining)} left`;
+    }
+    if (phase === "reveal" && revealDeadline) {
+      const remaining = revealDeadline - currentBlock;
+      return `Reveal phase: ${formatBlockDuration(remaining)} left`;
+    }
+    if (phase === "ended") {
+      return "Auction ended";
+    }
+    return null;
+  };
+
+  // Bid indicator badge — key UX signal for user's own auctions
+  const getBidIndicator = () => {
+    if (!userHasBid) return null;
+
+    if (phase === "commit") {
+      return (
+        <Badge variant="default" className="gap-1 text-xs bg-emerald-600 hover:bg-emerald-600">
+          <CheckCircle className="h-3 w-3" />
+          Bid Placed
+        </Badge>
+      );
+    }
+    if (phase === "reveal") {
+      // Pulsing amber badge — this is the key UX win, tells user to act NOW
+      return (
+        <Badge variant="warning" className="gap-1 text-xs animate-pulse">
+          <AlertTriangle className="h-3 w-3" />
+          Reveal Required
+        </Badge>
+      );
+    }
+    // Past reveal with unrevealed bid — bid is forfeited
+    if (phase === "ended") {
+      return (
+        <Badge variant="destructive" className="gap-1 text-xs">
+          <XCircle className="h-3 w-3" />
+          Bid Forfeited
+        </Badge>
+      );
+    }
+    return null;
+  };
+
+  const remainingText = getRemainingText();
+  const bidIndicator = getBidIndicator();
 
   return (
     <motion.div
@@ -57,7 +154,12 @@ export function AuctionCard({ auction, onSelect, onBid, index = 0 }) {
         <CardHeader className="p-4 md:p-6 pb-3">
           <div className="flex items-start justify-between gap-2">
             <CardTitle className="line-clamp-1 text-lg">{itemName}</CardTitle>
-            <AuctionStatusBadge status={status} />
+            <AuctionStatusBadge
+              status={status}
+              currentBlock={currentBlock}
+              commitDeadline={commitDeadline}
+              revealDeadline={revealDeadline}
+            />
           </div>
           <CardDescription className="line-clamp-1">
             by {truncateAddress(auctioneer)}
@@ -72,12 +174,13 @@ export function AuctionCard({ auction, onSelect, onBid, index = 0 }) {
             <span className="font-medium">{formatCredits(minBid)}</span>
           </div>
 
-          {/* Duration */}
-          <div className="flex items-center gap-2 text-sm">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-muted-foreground">Duration:</span>
-            <span className="font-medium">{durationText}</span>
-          </div>
+          {/* Phase Timing — actual remaining blocks, not total duration */}
+          {remainingText && (
+            <div className="flex items-center gap-2 text-sm">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">{remainingText}</span>
+            </div>
+          )}
 
           {/* Bid Count */}
           <div className="flex items-center gap-2 text-sm">
@@ -88,39 +191,62 @@ export function AuctionCard({ auction, onSelect, onBid, index = 0 }) {
             </span>
           </div>
 
-          {/* Phase Info */}
-          {status === AUCTION_STATUS.COMMIT_PHASE && (
-            <p className="text-xs text-muted-foreground">
-              Commit phase: {formatBlockDuration(commitDuration)} remaining
-            </p>
-          )}
-          {status === AUCTION_STATUS.REVEAL_PHASE && (
-            <p className="text-xs text-muted-foreground">
-              Reveal phase: {formatBlockDuration(revealDuration)} remaining
-            </p>
+          {/* Bid Indicator — shows user's bid status for this auction */}
+          {bidIndicator && (
+            <div className="pt-1">
+              {bidIndicator}
+            </div>
           )}
         </CardContent>
 
         <CardFooter className="gap-2 p-4 md:p-6 pt-4">
-          {canBid && onBid && (
+          {/* Phase-aware action buttons */}
+          {phase === "commit" && !userHasBid && onBid && (
             <Button className="flex-1" onClick={() => onBid(auction)}>
               Place Bid
             </Button>
           )}
-          {!canBid && status === AUCTION_STATUS.REVEAL_PHASE && onSelect && (
+          {phase === "commit" && userHasBid && onSelect && (
             <Button className="flex-1" variant="outline" onClick={() => onSelect(auction)}>
+              <Eye className="mr-2 h-4 w-4" />
+              View Bid
+            </Button>
+          )}
+          {phase === "reveal" && userHasBid && onSelect && (
+            <Button className="flex-1" onClick={() => onSelect(auction)}>
+              <AlertTriangle className="mr-2 h-4 w-4" />
               Reveal Bid
             </Button>
           )}
-          {onSelect && (
-            <Button
-              variant={canBid ? "outline" : "default"}
-              className={canBid ? "" : "flex-1"}
-              onClick={() => onSelect(auction)}
-            >
+          {phase === "reveal" && !userHasBid && onSelect && (
+            <Button className="flex-1" variant="outline" onClick={() => onSelect(auction)}>
               View Details
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
+          )}
+          {(phase === "ended" || phase === "cancelled") && onSelect && (
+            <Button className="flex-1" variant="outline" onClick={() => onSelect(auction)}>
+              View Details
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          )}
+          {/* Fallback: unknown phase or no deadlines yet — always show View Details */}
+          {phase === "unknown" && onSelect && (
+            <>
+              {onBid && (
+                <Button className="flex-1" onClick={() => onBid(auction)}>
+                  Place Bid
+                </Button>
+              )}
+              <Button
+                variant={onBid ? "outline" : "default"}
+                className={onBid ? "" : "flex-1"}
+                onClick={() => onSelect(auction)}
+              >
+                View Details
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </>
           )}
         </CardFooter>
       </Card>
