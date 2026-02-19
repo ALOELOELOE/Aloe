@@ -45,4 +45,4 @@ contracts/*/build/
 contracts/*/.leo/
 contracts/*/outputs/
 
-CLAUDE.md
+CLAUDE.mdclaude --resume b5ee22b6-2b90-4fc6-835e-a

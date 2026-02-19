@@ -133,11 +133,12 @@ export default function Auctions() {
       console.log("[Aloe] Transaction submitted!");
       console.log("[Aloe] Transaction ID:", txId);
 
-      // Store bid locally for later reveal
+      // Store bid locally for later reveal and refund (includes deposit for v4 contract)
       storeBidLocally(
         selectedAuction.id,
         bidMicro.toString(),
-        txInputs.metadata.salt
+        txInputs.metadata.salt,
+        bidMicro.toString()
       );
       console.log("[Aloe] Bid stored locally for reveal phase");
 

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, LayoutDashboard, Gavel, Clock } from "lucide-react";
 import { AUCTION_STATUS } from "@/lib/constants";
 import { useAuctionStore } from "@/store/auctionStore";
+import { useBlockHeight } from "@/hooks/useBlockHeight";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,6 +28,7 @@ const geistMono = Geist_Mono({
 export default function Dashboard() {
   const { address } = useWallet();
   const { auctions } = useAuctionStore();
+  const { currentBlock } = useBlockHeight();
 
   // Detail dialog state (replaces old bid-only dialog)
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
@@ -144,6 +146,7 @@ export default function Dashboard() {
         open={detailDialogOpen}
         onOpenChange={setDetailDialogOpen}
         auction={selectedAuction}
+        currentBlock={currentBlock}
       />
     </div>
   );
