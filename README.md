@@ -16,6 +16,8 @@ Bidder identities and bid amounts stay completely hidden until a designated reve
 
 The reference frontend in this repo is one interface on top of the primitive. The same contract can serve different use cases (NFT sales, procurement, token launches) through different frontends, or be composed into other on-chain programs.
 
+![Aloe landing page](public/landingpage.jpeg)
+
 ### How It Works
 
 ```

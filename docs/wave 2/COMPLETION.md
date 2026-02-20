@@ -237,13 +237,33 @@ Added an import flow that lets users paste an auction ID to fetch its data from 
 | URL param import | `?import=<auctionId>` auto-opens the import dialog (shareable links) |
 | Copyable auction ID | After creation, shows the auction ID with a copy button so creators can share it |
 
+### Bugs Fixed During Import Testing
+
+#### Stale Local Status Broke Phase Detection (Critical)
+
+- **Problem:** `AuctionDetailDialog` used `auction.status` from the local Zustand store for all phase checks (commit, reveal, settle, ended). For imported auctions, the local status could be stale or different from on-chain reality. If an auction was already settled on-chain (status `3`) but the local store still had status `1`, the Settle button wouldn't appear — or vice versa. This also caused imported auctions to show "Unknown" status badges when `status` was `null`.
+- **Fix:** Introduced `effectiveStatus` and `effectiveAuctioneer` that use on-chain data (refreshed every block) as source of truth, falling back to local store only if on-chain data hasn't loaded yet. All phase checks, button visibility, and the settle transaction now use these effective values.
+
+#### Imported Auctions With Incomplete Data
+
+- **Problem:** Importing an auction before its `create_auction` transaction was confirmed on-chain resulted in a card with null status ("Unknown"/"Pending" badge), empty auctioneer, and 0 min bid. These broken entries persisted in localStorage.
+- **Fix:** Import validation now rejects auctions with `null` status or missing auctioneer. Added `purgeIncomplete()` to the store that removes imported auctions with incomplete data on dashboard mount.
+
+#### Auction ID Not Copyable in Detail Dialog
+
+- **Problem:** The detail dialog truncated the auction ID (`177158216135...`) with no way to copy the full value. Users needed the full ID to share auctions for import.
+- **Fix:** Added a copy-to-clipboard button next to the auction ID in the detail dialog. Click copies the full ID and shows a confirmation.
+
 ### Files Modified
 
 | File | Changes |
 |------|---------|
 | `lib/aleo.js` | Enhanced `fetchAuctionOnChain` to parse `auctioneer`, `item_id`, `min_bid`; added `fetchBidCount` |
-| `components/ImportAuctionDialog.jsx` | New dialog for importing auctions by ID |
-| `pages/dashboard.js` | Import button, `ImportAuctionDialog` integration, `?import=` URL param handling |
+| `components/ImportAuctionDialog.jsx` | New dialog for importing auctions by ID with validation |
+| `components/AuctionDetailDialog.jsx` | On-chain status/auctioneer override (`effectiveStatus`, `effectiveAuctioneer`); copyable auction ID row |
+| `components/AuctionStatusBadge.jsx` | Changed fallback label from "Unknown" to "Pending" |
+| `store/auctionStore.js` | Added `purgeIncomplete()` to remove imported auctions with null data |
+| `pages/dashboard.js` | Import button, `ImportAuctionDialog` integration, `?import=` URL param handling, `purgeIncomplete` on mount |
 | `components/CreateAuctionForm.jsx` | Copyable auction ID banner after successful creation |
 
 ### Why Not Auto-Sync?
@@ -264,3 +284,4 @@ Aleo mappings don't support enumeration — there's no `getAllKeys()`. A proper 
 
 *Wave 2 completed February 19, 2026*
 *Post-Wave 2 UX fixes applied February 19, 2026*
+*Cross-browser import feature and phase detection fixes applied February 20, 2026*

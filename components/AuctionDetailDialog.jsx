@@ -93,26 +93,29 @@ export function AuctionDetailDialog({
 
   if (!auction) return null;
 
-  // Use on-chain deadlines (source of truth) — fall back to local estimates only if not fetched yet
+  // Use on-chain data as source of truth — fall back to local store only if not fetched yet
   const commitDeadline = onChainData?.commitDeadline ?? auction.commitDeadline ?? null;
   const revealDeadline = onChainData?.revealDeadline ?? auction.revealDeadline ?? null;
+  // On-chain status overrides local store (handles imported auctions + stale local state)
+  const effectiveStatus = onChainData?.status ?? auction.status;
 
-  // Determine current phase based on block height and ON-CHAIN deadlines
+  // Determine current phase based on block height and ON-CHAIN deadlines + status
   // Without on-chain data or block height, default to commit phase (safest — prevents premature actions)
   const isCommitPhase =
-    auction.status === AUCTION_STATUS.COMMIT_PHASE &&
+    effectiveStatus === AUCTION_STATUS.COMMIT_PHASE &&
     (!currentBlock || !commitDeadline || currentBlock <= commitDeadline);
   const isRevealPhase =
-    auction.status === AUCTION_STATUS.COMMIT_PHASE &&
+    effectiveStatus === AUCTION_STATUS.COMMIT_PHASE &&
     currentBlock && commitDeadline && revealDeadline &&
     currentBlock > commitDeadline &&
     currentBlock <= revealDeadline;
   const isPastReveal =
-    auction.status === AUCTION_STATUS.COMMIT_PHASE &&
+    effectiveStatus === AUCTION_STATUS.COMMIT_PHASE &&
     currentBlock && revealDeadline &&
     currentBlock > revealDeadline;
-  const isEnded = auction.status === AUCTION_STATUS.ENDED;
-  const isAuctioneer = address === auction.auctioneer;
+  const isEnded = effectiveStatus === AUCTION_STATUS.ENDED;
+  const effectiveAuctioneer = onChainData?.auctioneer ?? auction.auctioneer;
+  const isAuctioneer = address === effectiveAuctioneer;
 
   // Handle bid submission (with private credits record)
   const handlePlaceBid = async () => {
@@ -347,11 +350,11 @@ export function AuctionDetailDialog({
               </Button>
             )}
 
-            {/* Past reveal deadline — Settle */}
+            {/* Past reveal deadline — Settle (anyone can call, contract verifies auctioneer) */}
             {isPastReveal && (
               <SettleAuctionButton
                 auction={auction}
-                auctioneer={auction.auctioneer}
+                auctioneer={effectiveAuctioneer}
                 winningAmount={auction.winningBid || 0}
                 onSettled={() => onOpenChange(false)}
               />
@@ -366,7 +369,7 @@ export function AuctionDetailDialog({
             )}
 
             {/* Cancel — auctioneer only, zero bids */}
-            {isAuctioneer && auction.status === AUCTION_STATUS.COMMIT_PHASE && (auction.bidCount || 0) === 0 && (
+            {isAuctioneer && effectiveStatus === AUCTION_STATUS.COMMIT_PHASE && (auction.bidCount || 0) === 0 && (
               <Button
                 variant="destructive"
                 onClick={handleCancel}
