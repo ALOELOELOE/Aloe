@@ -27,6 +27,7 @@ import {
   DEFAULT_COMMIT_DURATION,
   DEFAULT_REVEAL_DURATION,
   AUCTION_STATUS,
+  PROGRAM_ID,
 } from "@/lib/constants";
 import { useAuctionStore } from "@/store/auctionStore";
 
@@ -167,6 +168,7 @@ export function CreateAuctionForm({ onSuccess }) {
         status: AUCTION_STATUS.COMMIT_PHASE,
         bidCount: 0,
         txId: txId,
+        programId: PROGRAM_ID, // Tag with current contract version
       };
 
       addAuction(newAuction);
