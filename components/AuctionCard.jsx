@@ -24,6 +24,7 @@ import {
   isBidRevealed,
 } from "@/lib/aleo";
 import { AUCTION_STATUS } from "@/lib/constants";
+import { useAuctionStore } from "@/store/auctionStore";
 import { Clock, Users, Gavel, ArrowRight, Eye, CheckCircle, AlertTriangle, XCircle, Trophy } from "lucide-react";
 
 /**
@@ -58,6 +59,7 @@ function getActualPhase(status, currentBlock, commitDeadline, revealDeadline) {
  */
 export function AuctionCard({ auction, onSelect, onBid, index = 0, currentBlock = null }) {
   const { address } = useWallet();
+  const { updateAuction } = useAuctionStore();
   const {
     id,
     itemName,
@@ -83,8 +85,10 @@ export function AuctionCard({ auction, onSelect, onBid, index = 0, currentBlock 
     if (!id || status === AUCTION_STATUS.CANCELLED) return;
 
     // Skip fetch for ended auctions where user has no bid (no badge needed)
+    // BUT always fetch if we don't have deadlines yet (needed for dashboard filters)
     const isEnded = status === AUCTION_STATUS.ENDED;
-    if (isEnded && !userHasBid) return;
+    const needsDeadlines = !auction.commitDeadline || !auction.revealDeadline;
+    if (isEnded && !userHasBid && !needsDeadlines) return;
 
     let cancelled = false;
     fetchAuctionOnChain(id).then((data) => {
@@ -92,10 +96,16 @@ export function AuctionCard({ auction, onSelect, onBid, index = 0, currentBlock 
       setCommitDeadline(data.commitDeadline);
       setRevealDeadline(data.revealDeadline);
       if (data.winner) setWinner(data.winner);
+
+      // Write deadlines back to the store so dashboard filters can use them
+      const updates = {};
+      if (data.commitDeadline) updates.commitDeadline = data.commitDeadline;
+      if (data.revealDeadline) updates.revealDeadline = data.revealDeadline;
+      if (Object.keys(updates).length > 0) updateAuction(id, updates);
     });
 
     return () => { cancelled = true; };
-  }, [id, status, userHasBid]);
+  }, [id, status, userHasBid, updateAuction]);
 
   // Determine actual phase from on-chain data
   const phase = getActualPhase(status, currentBlock, commitDeadline, revealDeadline);
