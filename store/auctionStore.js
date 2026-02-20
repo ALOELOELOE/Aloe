@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { AUCTION_STATUS, STORAGE_KEYS } from "@/lib/constants";
+import { AUCTION_STATUS, STORAGE_KEYS, PROGRAM_ID } from "@/lib/constants";
 
 /**
  * Auction store using Zustand
@@ -142,6 +142,15 @@ export const useAuctionStore = create(
       getAuctionsByCreator: (address) => {
         return get().auctions.filter((a) => a.auctioneer === address);
       },
+
+      /**
+       * Remove auctions from old contract versions
+       * Keeps only auctions tagged with the current PROGRAM_ID
+       */
+      purgeOldContracts: () =>
+        set((state) => ({
+          auctions: state.auctions.filter((a) => a.programId === PROGRAM_ID),
+        })),
 
       /**
        * Reset store (for testing)
