@@ -184,8 +184,8 @@ After completing Wave 2, several UX issues were identified and fixed:
 
 ### Bid Indicator Badges
 
-- **Problem:** Users couldn't see which auctions they'd bid on or which needed reveal action.
-- **Fix:** `AuctionCard` checks `hasStoredBid(auctionId)` and shows phase-aware badges: green "Bid Placed" during commit, pulsing amber "Reveal Required" during reveal, red "Bid Forfeited" after deadline. Card buttons also adapt: "Place Bid" → "View Bid" (if bid exists), "Reveal Bid" (during reveal phase).
+- **Problem:** Users couldn't see which auctions they'd bid on or which needed reveal action. Additionally, ended auctions always showed "Bid Forfeited" even when the user had successfully revealed their bid or won the auction — because `hasStoredBid()` returned true (bid data is kept for refund claims) but there was no tracking of reveal or winner status.
+- **Fix:** `AuctionCard` checks `hasStoredBid(auctionId)` and shows phase-aware badges: green "Bid Placed" during commit, pulsing amber "Reveal Required" during reveal. For ended auctions, it now differentiates three states: amber "Winner" (trophy icon) if the user's wallet matches the on-chain winner, gray "Bid Revealed" if the bid was revealed but didn't win, and red "Bid Forfeited" only for unrevealed bids. Added `markBidRevealed()` and `isBidRevealed()` helpers to track reveal status in localStorage, and `AuctionCard` now fetches on-chain winner data for ended auctions via `fetchAuctionOnChain()`. Card buttons also adapt: "Place Bid" → "View Bid" (if bid exists), "Reveal Bid" (during reveal phase).
 
 ### Fixed Broken `/auctions` Page
 
@@ -206,9 +206,10 @@ After completing Wave 2, several UX issues were identified and fixed:
 
 | File | Changes |
 |------|---------|
-| `lib/aleo.js` | Added `hasStoredBid()` helper |
+| `lib/aleo.js` | Added `hasStoredBid()`, `markBidRevealed()`, `isBidRevealed()` helpers |
 | `components/AuctionList.jsx` | Accepts and passes `currentBlock` prop |
-| `components/AuctionCard.jsx` | On-chain deadline fetch, bid indicators, phase-aware buttons |
+| `components/AuctionCard.jsx` | On-chain deadline + winner fetch, bid indicators with winner/revealed/forfeited states, phase-aware buttons |
+| `components/RevealBidDialog.jsx` | Calls `markBidRevealed()` after successful reveal |
 | `components/AuctionStatusBadge.jsx` | Handles past-revealDeadline as "Ended" |
 | `components/WalletConnect.jsx` | Shield Credits button + dialog integration |
 | `pages/dashboard.js` | Passes `currentBlock` to `AuctionList` |

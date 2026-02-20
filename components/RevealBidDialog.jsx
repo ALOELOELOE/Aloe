@@ -17,6 +17,7 @@ import { Loader2, Eye, AlertTriangle, Clock, CheckCircle2, XCircle } from "lucid
 import { toast } from "sonner";
 import {
   getStoredBid,
+  markBidRevealed,
   formatCredits,
   buildRevealBidInputs,
   isRealTransaction,
@@ -190,8 +191,9 @@ export function RevealBidDialog({ open, onOpenChange, auction }) {
         });
       }
 
-      // Note: Don't clear stored bid data after reveal — it's still needed for claim_refund
-      // Bid data will be cleared after successful refund claim or can be cleaned up manually
+      // Mark bid as revealed so AuctionCard shows correct status instead of "Bid Forfeited"
+      // Bid data is kept (not cleared) because it's still needed for claim_refund
+      markBidRevealed(auction.id);
 
       console.log("[Aloe:RevealBidDialog] Reveal successful, tx:", txId);
 

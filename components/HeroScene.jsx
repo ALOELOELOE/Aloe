@@ -238,22 +238,22 @@ function Stars({ count = 80 }) {
   );
 }
 
-// Center position (emerald location)
-const CENTER = [0.5, 0, 0];
+// Center position — shifted right so the gem sits on the right half of the viewport
+const CENTER = [1.5, 0, 0];
 
 // Ring configuration - crossing pattern
 const RING_1 = {
   radius: 3.2,
   color: "#10b981",
   tilt: [Math.PI / 4, 0, 0], // Tilted forward
-  speed: 0.4,
+  speed: 1.2,
 };
 
 const RING_2 = {
   radius: 3.5,
   color: "#6ee7b7",
   tilt: [Math.PI / 2.5, Math.PI / 2, 0], // Tilted sideways to cross
-  speed: 0.3,
+  speed: 0.9,
 };
 
 // Shared orbit angle controller
@@ -286,7 +286,7 @@ function Scene({ onLoaded }) {
       <LoadingTracker onLoaded={onLoaded} />
 
       {/* Shared orbit controller - updates the angle for all elements */}
-      <OrbitController angleRef={sharedAngleRef} speed={0.4} />
+      <OrbitController angleRef={sharedAngleRef} speed={1.2} />
 
       {/* Lighting */}
       <ambientLight intensity={0.3} />

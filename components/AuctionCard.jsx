@@ -2,6 +2,7 @@
 // Displays individual auction information with on-chain phase detection and bid indicators
 
 import { useState, useEffect } from "react";
+import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import { motion } from "framer-motion";
 import {
   Card,
@@ -20,9 +21,10 @@ import {
   truncateAddress,
   fetchAuctionOnChain,
   hasStoredBid,
+  isBidRevealed,
 } from "@/lib/aleo";
 import { AUCTION_STATUS } from "@/lib/constants";
-import { Clock, Users, Gavel, ArrowRight, Eye, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { Clock, Users, Gavel, ArrowRight, Eye, CheckCircle, AlertTriangle, XCircle, Trophy } from "lucide-react";
 
 /**
  * Determine the actual auction phase from on-chain deadlines + current block
@@ -55,6 +57,7 @@ function getActualPhase(status, currentBlock, commitDeadline, revealDeadline) {
  * @param {number} currentBlock - Current block height from useBlockHeight()
  */
 export function AuctionCard({ auction, onSelect, onBid, index = 0, currentBlock = null }) {
+  const { address } = useWallet();
   const {
     id,
     itemName,
@@ -67,26 +70,35 @@ export function AuctionCard({ auction, onSelect, onBid, index = 0, currentBlock 
   // On-chain deadline state — fetched once on mount
   const [commitDeadline, setCommitDeadline] = useState(null);
   const [revealDeadline, setRevealDeadline] = useState(null);
+  // Winner address from on-chain data — used to show "Winner" badge
+  const [winner, setWinner] = useState(null);
 
-  // Fetch on-chain deadlines once when the card mounts (no polling — cards are in a grid)
+  // Check if user has a stored bid for this auction
+  const userHasBid = hasStoredBid(id);
+
+  // Fetch on-chain data once when the card mounts
+  // For active auctions: fetch deadlines for phase detection
+  // For ended auctions with a user bid: fetch winner to show correct badge
   useEffect(() => {
-    if (!id || status === AUCTION_STATUS.ENDED || status === AUCTION_STATUS.CANCELLED) return;
+    if (!id || status === AUCTION_STATUS.CANCELLED) return;
+
+    // Skip fetch for ended auctions where user has no bid (no badge needed)
+    const isEnded = status === AUCTION_STATUS.ENDED;
+    if (isEnded && !userHasBid) return;
 
     let cancelled = false;
     fetchAuctionOnChain(id).then((data) => {
       if (cancelled || !data) return;
       setCommitDeadline(data.commitDeadline);
       setRevealDeadline(data.revealDeadline);
+      if (data.winner) setWinner(data.winner);
     });
 
     return () => { cancelled = true; };
-  }, [id, status]);
+  }, [id, status, userHasBid]);
 
   // Determine actual phase from on-chain data
   const phase = getActualPhase(status, currentBlock, commitDeadline, revealDeadline);
-
-  // Check if user has a stored bid for this auction
-  const userHasBid = hasStoredBid(id);
 
   // Calculate remaining blocks for the current phase
   const getRemainingText = () => {
@@ -127,8 +139,27 @@ export function AuctionCard({ auction, onSelect, onBid, index = 0, currentBlock 
         </Badge>
       );
     }
-    // Past reveal with unrevealed bid — bid is forfeited
+    // Ended auction — show winner, revealed, or forfeited badge
     if (phase === "ended") {
+      // Check if user won the auction
+      if (address && winner && address === winner) {
+        return (
+          <Badge variant="default" className="gap-1 text-xs bg-amber-600 hover:bg-amber-600">
+            <Trophy className="h-3 w-3" />
+            Winner
+          </Badge>
+        );
+      }
+      if (isBidRevealed(id)) {
+        // Bid was revealed but didn't win — can claim refund
+        return (
+          <Badge variant="secondary" className="gap-1 text-xs">
+            <CheckCircle className="h-3 w-3" />
+            Bid Revealed
+          </Badge>
+        );
+      }
+      // Unrevealed bid — deposit is forfeited
       return (
         <Badge variant="destructive" className="gap-1 text-xs">
           <XCircle className="h-3 w-3" />

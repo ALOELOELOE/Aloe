@@ -7,18 +7,10 @@ import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { LoadingScreen } from "@/components/LoadingScreen";
-import {
-  ArrowRight,
-  Gavel,
-  ImageIcon,
-  Briefcase,
-  ShieldCheck,
-  EyeOff,
-  Scale,
-} from "lucide-react";
+import { UseCaseShowcase } from "@/components/UseCaseShowcase";
+import { PrivacyShowcase } from "@/components/PrivacyShowcase";
+import { ArrowRight } from "lucide-react";
 
 // Dynamically import the 3D scene to avoid SSR issues
 const HeroScene = dynamic(
@@ -36,56 +28,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Use-case cards — same auction primitive, different applications
-const USE_CASE_CARDS = [
-  {
-    icon: Gavel,
-    title: "Sealed-Bid Auctions",
-    description: "Bid without revealing your hand. ZK-committed bids prevent sniping and information leakage.",
-    privacy: "Eliminates bid sniping & front-running",
-    href: "/dashboard",
-    status: "live",
-  },
-  {
-    icon: ImageIcon,
-    title: "NFT Auctions",
-    description: "Private NFT sales with sealed bids. Collectors bid without exposing portfolio or bid history.",
-    privacy: "Protects portfolio exposure & bid tracking",
-    href: "/nft",
-    status: "coming_soon",
-  },
-  {
-    icon: Briefcase,
-    title: "Procurement / RFQ",
-    description: "Reverse auctions for sourcing. Suppliers submit sealed quotes — lowest wins.",
-    privacy: "Prevents price collusion & bid-rigging",
-    href: "/procurement",
-    status: "coming_soon",
-  },
-];
-
-// Why privacy section — three value pillars
-const PRIVACY_PILLARS = [
-  {
-    icon: ShieldCheck,
-    title: "No Front-Running",
-    description:
-      "Your bids are hidden until the reveal phase. No one can see your bid and outbid you by $1.",
-  },
-  {
-    icon: EyeOff,
-    title: "No Information Leakage",
-    description:
-      "Bid amounts, bidder identity, and strategy stay private. Only you know your position.",
-  },
-  {
-    icon: Scale,
-    title: "Fair by Design",
-    description:
-      "ZK proofs ensure honest settlement. Cryptographic guarantees replace trust.",
-  },
-];
-
 export default function Home() {
   const [isLoaded, setIsLoaded] = useState(false);
   // Unmount LoadingScreen after its exit animation finishes
@@ -100,7 +42,7 @@ export default function Home() {
 
   return (
     <div
-      className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-black font-sans text-white`}
+      className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-black font-sans text-white overflow-x-hidden`}
     >
       {/* Loading Screen — unmounted after exit animation to free FM's rAF loop */}
       {!loadingDone && <LoadingScreen isLoaded={isLoaded} />}
@@ -150,7 +92,7 @@ export default function Home() {
       {/* Hero Section - Full Screen with 3D background */}
       {/* ============================================ */}
       <section
-        className="relative min-h-screen flex items-center overflow-hidden"
+        className="relative min-h-screen flex items-center"
         style={{ contain: "layout style paint" }}
       >
         {/* 3D Scene Background */}
@@ -158,11 +100,11 @@ export default function Home() {
           <HeroScene onLoaded={handleLoaded} />
         </div>
 
-        {/* Hero Content */}
-        <div className="relative z-10 mx-auto max-w-6xl px-4 w-full">
+        {/* Hero Content — pinned to left side, gem occupies right */}
+        <div className="relative z-10 w-full px-6 md:px-12 lg:px-16">
           <div className="max-w-2xl">
             <h1
-              className="mb-6 text-5xl font-bold leading-tight tracking-tight md:text-6xl lg:text-7xl"
+              className="mb-6 text-4xl font-bold leading-tight tracking-tight md:text-5xl lg:text-6xl"
               style={{
                 opacity: isLoaded ? 1 : 0,
                 transform: isLoaded ? "translateY(0)" : "translateY(30px)",
@@ -219,147 +161,137 @@ export default function Home() {
       </section>
 
       {/* ============================================ */}
-      {/* Use Cases Section — same primitive, different applications */}
+      {/* Use Cases — interactive tabbed showcase with GSAP */}
       {/* ============================================ */}
-      <section
-        id="use-cases"
-        className="relative z-10 bg-black py-24"
-        style={{ contentVisibility: "auto", containIntrinsicSize: "0 600px" }}
-      >
-        <div className="mx-auto max-w-6xl px-4">
-          <div className="mb-12 text-center">
-            <h2 className="text-3xl font-bold md:text-4xl">
-              One Primitive, Many Applications
-            </h2>
-            <p className="mt-3 text-gray-400 max-w-2xl mx-auto">
-              The same composable auction contract powers every use case.
-              Different frontends, same privacy guarantees.
-            </p>
-          </div>
-
-          {/* Use Case Cards Grid */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {USE_CASE_CARDS.map((card) => {
-              const Icon = card.icon;
-              const isLive = card.status === "live";
-
-              return (
-                <div key={card.title}>
-                  <Link href={card.href}>
-                    <Card className="group h-full border-gray-800 bg-gray-950 hover:border-emerald-500/50 transition-colors duration-200 cursor-pointer">
-                      <CardContent className="p-6">
-                        {/* Icon + Status */}
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500/20 transition-colors">
-                            <Icon className="h-5 w-5" />
-                          </div>
-                          <Badge
-                            variant={isLive ? "default" : "outline"}
-                            className={
-                              isLive
-                                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                                : "border-gray-700 text-gray-500"
-                            }
-                          >
-                            {isLive ? "Live" : "Coming Soon"}
-                          </Badge>
-                        </div>
-
-                        {/* Title + Description */}
-                        <h3 className="text-lg font-semibold text-white mb-2">
-                          {card.title}
-                        </h3>
-                        <p className="text-sm text-gray-400 mb-3">
-                          {card.description}
-                        </p>
-
-                        {/* Privacy value */}
-                        <p className="text-xs text-emerald-400/80">
-                          {card.privacy}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+      <UseCaseShowcase />
 
       {/* ============================================ */}
-      {/* Why Privacy Section - 3 columns */}
+      {/* Why Privacy Section - 3 columns with staggered entrance */}
       {/* ============================================ */}
-      <section
-        id="privacy"
-        className="relative z-10 bg-gray-950 py-24"
-        style={{ contentVisibility: "auto", containIntrinsicSize: "0 500px" }}
-      >
-        <div className="mx-auto max-w-6xl px-4">
-          <div className="mb-12 text-center">
-            <h2 className="text-3xl font-bold md:text-4xl">
-              Why Privacy Matters
-            </h2>
-            <p className="mt-3 text-gray-400 max-w-2xl mx-auto">
-              Public blockchains expose everything. Aloe uses Aleo&apos;s
-              zero-knowledge proofs to keep your auction activity private.
-            </p>
-          </div>
-
-          {/* Privacy Pillars */}
-          <div className="grid gap-8 md:grid-cols-3">
-            {PRIVACY_PILLARS.map((pillar) => {
-              const Icon = pillar.icon;
-              return (
-                <div key={pillar.title} className="text-center">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
-                    <Icon className="h-7 w-7" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">
-                    {pillar.title}
-                  </h3>
-                  <p className="text-sm text-gray-400">{pillar.description}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+      <PrivacyShowcase />
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-gray-800 bg-black py-8">
+      <footer className="relative z-10 border-t border-neutral-800 bg-black py-12">
         <div className="mx-auto max-w-6xl px-4">
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
-            {/* Logo */}
-            <div className="flex items-center gap-2">
-              <Image
-                src="/logo-removebg-preview.png"
-                alt="Aloe"
-                width={24}
-                height={24}
-              />
-              <span className="text-sm font-medium text-gray-400">
-                Aloe — Privacy-Preserving Auction Primitive
-              </span>
+          {/* Top row — logo, nav columns, CTA */}
+          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4 mb-10">
+            {/* Brand */}
+            <div className="sm:col-span-2 lg:col-span-1">
+              <div className="flex items-center gap-2 mb-3">
+                <Image
+                  src="/logo-removebg-preview.png"
+                  alt="Aloe"
+                  width={24}
+                  height={24}
+                />
+                <span className="text-sm font-semibold text-white">Aloe</span>
+              </div>
+              <p className="text-xs text-neutral-500 leading-relaxed max-w-[220px]">
+                Privacy-preserving auction infrastructure powered by
+                zero-knowledge proofs on Aleo.
+              </p>
             </div>
 
-            {/* Links */}
-            <div className="flex items-center gap-6 text-sm text-gray-500">
-              <Link
-                href="/dashboard"
-                className="hover:text-white transition-colors"
-              >
-                Launch App
+            {/* Product links */}
+            <div>
+              <p className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-3">
+                Product
+              </p>
+              <ul className="space-y-2 text-sm text-neutral-500">
+                <li>
+                  <Link href="/dashboard" className="hover:text-white transition-colors">
+                    Sealed-Bid Auctions
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/nft" className="hover:text-white transition-colors">
+                    NFT Auctions
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/create" className="hover:text-white transition-colors">
+                    Create Auction
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Resources links */}
+            <div>
+              <p className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-3">
+                Resources
+              </p>
+              <ul className="space-y-2 text-sm text-neutral-500">
+                <li>
+                  <a
+                    href="https://aleo.org"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors"
+                  >
+                    Aleo Network
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://developer.aleo.org"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors"
+                  >
+                    Aleo Docs
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors"
+                  >
+                    GitHub
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            {/* CTA column */}
+            <div>
+              <p className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-3">
+                Get Started
+              </p>
+              <Link href="/dashboard">
+                <Button
+                  size="sm"
+                  className="gap-2 bg-emerald-500 text-black hover:bg-emerald-400"
+                >
+                  Launch App
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
               </Link>
+              <p className="text-xs text-neutral-600 mt-3">
+                No sign-up required. Connect your Aleo wallet to start.
+              </p>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="h-px bg-neutral-800 mb-6" />
+
+          {/* Bottom row — copyright + built on */}
+          <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between text-xs text-neutral-600">
+            <span>&copy; {new Date().getFullYear()} Aloe. All rights reserved.</span>
+            <span>
+              Built on{" "}
               <a
                 href="https://aleo.org"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-white transition-colors"
+                className="text-neutral-500 hover:text-white transition-colors"
               >
-                Built on Aleo
+                Aleo
               </a>
-            </div>
+            </span>
           </div>
         </div>
       </footer>
