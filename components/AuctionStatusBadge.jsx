@@ -50,9 +50,9 @@ export function AuctionStatusBadge({
       return { label: "Accepting Bids", variant: "default" };
     }
 
-    // Fallback: use status labels
+    // Fallback: use status labels, or "Pending" if status is unrecognized
     return {
-      label: AUCTION_STATUS_LABELS[status] || "Unknown",
+      label: AUCTION_STATUS_LABELS[status] || "Pending",
       variant: "secondary",
     };
   };

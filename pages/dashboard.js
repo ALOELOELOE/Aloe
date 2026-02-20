@@ -2,6 +2,7 @@
 // Main app interface for viewing and managing auctions
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -9,8 +10,9 @@ import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import { AppHeader } from "@/components/AppHeader";
 import { AuctionList } from "@/components/AuctionList";
 import { AuctionDetailDialog } from "@/components/AuctionDetailDialog";
+import { ImportAuctionDialog } from "@/components/ImportAuctionDialog";
 import { Button } from "@/components/ui/button";
-import { Plus, LayoutDashboard, Gavel, Clock } from "lucide-react";
+import { Plus, LayoutDashboard, Gavel, Clock, Download } from "lucide-react";
 import { AUCTION_STATUS } from "@/lib/constants";
 import { useAuctionStore } from "@/store/auctionStore";
 import { useBlockHeight } from "@/hooks/useBlockHeight";
@@ -26,18 +28,36 @@ const geistMono = Geist_Mono({
 });
 
 export default function Dashboard() {
+  const router = useRouter();
   const { address } = useWallet();
-  const { auctions, purgeOldContracts } = useAuctionStore();
+  const { auctions, purgeOldContracts, purgeIncomplete } = useAuctionStore();
   const { currentBlock } = useBlockHeight();
 
-  // Purge auctions from old contract versions on mount
+  // Purge stale data on mount: old contract versions + incomplete imports
   useEffect(() => {
     purgeOldContracts();
-  }, [purgeOldContracts]);
+    purgeIncomplete();
+  }, [purgeOldContracts, purgeIncomplete]);
 
   // Detail dialog state (replaces old bid-only dialog)
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedAuction, setSelectedAuction] = useState(null);
+
+  // Import dialog state
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importPrefillId, setImportPrefillId] = useState("");
+
+  // Auto-import from URL param: ?import=<auctionId>
+  useEffect(() => {
+    const importId = router.query.import;
+    if (importId && typeof importId === "string") {
+      // Pre-fill and open import dialog
+      setImportPrefillId(importId);
+      setImportDialogOpen(true);
+      // Clear the URL param without a full navigation
+      router.replace("/dashboard", undefined, { shallow: true });
+    }
+  }, [router.query.import, router]);
 
   // Helper: determine if an auction is still live (commit or reveal phase)
   // Status 1 (COMMIT_PHASE) covers both commit and reveal on-chain,
@@ -195,12 +215,25 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <Link href="/create">
-                <Button className="w-full sm:w-auto gap-2 bg-emerald-500 hover:bg-emerald-600 text-black font-semibold h-11 px-6 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all">
-                  <Plus className="h-4 w-4" />
-                  New Auction
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="gap-2 border-neutral-700 hover:border-emerald-500/50 hover:bg-emerald-500/10 text-neutral-300 hover:text-emerald-400 h-11 px-5 rounded-xl transition-all"
+                  onClick={() => {
+                    setImportPrefillId("");
+                    setImportDialogOpen(true);
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                  Import
                 </Button>
-              </Link>
+                <Link href="/create">
+                  <Button className="gap-2 bg-emerald-500 hover:bg-emerald-600 text-black font-semibold h-11 px-6 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all">
+                    <Plus className="h-4 w-4" />
+                    New Auction
+                  </Button>
+                </Link>
+              </div>
             </div>
 
             <AuctionList
@@ -243,6 +276,13 @@ export default function Dashboard() {
         onOpenChange={setDetailDialogOpen}
         auction={selectedAuction}
         currentBlock={currentBlock}
+      />
+
+      {/* Import Auction Dialog */}
+      <ImportAuctionDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        prefillId={importPrefillId}
       />
     </div>
   );

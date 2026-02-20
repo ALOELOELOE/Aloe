@@ -153,6 +153,17 @@ export const useAuctionStore = create(
         })),
 
       /**
+       * Remove imported auctions with incomplete data (null status, no auctioneer)
+       * These are imports that fetched before the on-chain tx was confirmed
+       */
+      purgeIncomplete: () =>
+        set((state) => ({
+          auctions: state.auctions.filter(
+            (a) => !a.imported || (a.status != null && a.auctioneer)
+          ),
+        })),
+
+      /**
        * Reset store (for testing)
        */
       reset: () =>

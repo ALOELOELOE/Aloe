@@ -6,16 +6,8 @@ import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Copy, Check } from "lucide-react";
 import {
   generateAuctionId,
   buildCreateAuctionInputs,
@@ -48,6 +40,10 @@ export function CreateAuctionForm({ onSuccess }) {
   const [revealDuration, setRevealDuration] = useState(
     DEFAULT_REVEAL_DURATION.toString()
   );
+
+  // Track the last created auction ID so the user can copy & share it
+  const [createdAuctionId, setCreatedAuctionId] = useState(null);
+  const [idCopied, setIdCopied] = useState(false);
 
   // Handle form submission
   const handleSubmit = async (e) => {
@@ -174,8 +170,13 @@ export function CreateAuctionForm({ onSuccess }) {
       addAuction(newAuction);
       console.log("[Aloe] Auction added to local store:", newAuction);
 
+      // Save the auction ID so user can copy and share it with others
+      setCreatedAuctionId(auctionId);
+      setIdCopied(false);
+
       toast.success("Auction created successfully!", {
-        description: `Transaction ID: ${txId?.slice(0, 16)}...`,
+        description: `Auction ID: ${auctionId} — share this so others can import it.`,
+        duration: 10000,
       });
 
       console.log("[Aloe] ====== CREATE AUCTION COMPLETE ======");
@@ -209,24 +210,41 @@ export function CreateAuctionForm({ onSuccess }) {
   };
 
   return (
-    <div className="w-full max-w-xl mx-auto p-8 sm:p-10 bg-black/40 backdrop-blur-xl border border-neutral-800/60 rounded-[2rem] shadow-2xl">
-      <div className="mb-8">
-        <h2 className="flex items-center gap-3 text-2xl font-bold text-white tracking-tight">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 ring-1 ring-emerald-500/20">
-            <Plus className="h-5 w-5" />
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Copyable auction ID banner — shown after successful creation */}
+      {createdAuctionId && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-2">
+          <p className="text-xs text-emerald-400 font-medium">Auction created! Share this ID:</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs font-mono text-white bg-black/40 rounded px-2.5 py-1.5 truncate select-all">
+              {createdAuctionId}
+            </code>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 shrink-0"
+              onClick={() => {
+                navigator.clipboard.writeText(createdAuctionId);
+                setIdCopied(true);
+                toast.success("Auction ID copied!");
+                setTimeout(() => setIdCopied(false), 2000);
+              }}
+            >
+              {idCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            </Button>
           </div>
-          Create Auction
-        </h2>
-        <p className="mt-3 text-sm text-neutral-400 leading-relaxed">
-          Launch a new sealed-bid auction. Bidders will submit encrypted bids
-          that are revealed after the commit phase ends.
-        </p>
-      </div>
+          <p className="text-[10px] text-neutral-500">
+            Others can import this auction on their browser via Dashboard &rarr; Import
+          </p>
+        </div>
+      )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Form fields */}
+      <div className="space-y-4">
         {/* Item Name */}
-        <div className="space-y-3">
-          <Label htmlFor="itemName" className="text-neutral-300 ml-1">Item Name</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="itemName" className="text-neutral-400 text-xs font-medium uppercase tracking-wider ml-1">Item Name</Label>
           <Input
             id="itemName"
             placeholder="e.g., Vintage Rolex Submariner"
@@ -234,15 +252,15 @@ export function CreateAuctionForm({ onSuccess }) {
             onChange={(e) => setItemName(e.target.value)}
             disabled={isCreating}
             required
-            className="h-12 bg-black/50 border-neutral-800 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/50 rounded-xl px-4"
+            className="h-10 bg-black/40 border-neutral-800/80 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/40 focus-visible:border-emerald-500/40 rounded-lg px-3.5 text-sm transition-colors"
           />
         </div>
 
         {/* Minimum Bid */}
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           <div className="flex justify-between items-baseline ml-1">
-            <Label htmlFor="minBid" className="text-neutral-300">Minimum Bid</Label>
-            <span className="text-xs text-neutral-500 font-mono">CREDITS</span>
+            <Label htmlFor="minBid" className="text-neutral-400 text-xs font-medium uppercase tracking-wider">Minimum Bid</Label>
+            <span className="text-[10px] text-neutral-600 font-mono tracking-wider">CREDITS</span>
           </div>
           <Input
             id="minBid"
@@ -254,19 +272,20 @@ export function CreateAuctionForm({ onSuccess }) {
             onChange={(e) => setMinBid(e.target.value)}
             disabled={isCreating}
             required
-            className="h-12 bg-black/50 border-neutral-800 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/50 rounded-xl px-4 font-mono text-lg"
+            className="h-10 bg-black/40 border-neutral-800/80 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/40 focus-visible:border-emerald-500/40 rounded-lg px-3.5 font-mono text-sm transition-colors"
           />
-          <p className="text-xs text-neutral-500 ml-1">
+          <p className="text-[11px] text-neutral-600 ml-1">
             Minimum required starting floor
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
+        {/* Commit and Reveal durations — always side by side */}
+        <div className="grid grid-cols-2 gap-4">
           {/* Commit Duration */}
-          <div className="space-y-3">
+          <div className="space-y-1.5">
             <div className="flex justify-between items-baseline ml-1">
-              <Label htmlFor="commitDuration" className="text-neutral-300">Commit Phase</Label>
-              <span className="text-xs text-neutral-500 font-mono">BLOCKS</span>
+              <Label htmlFor="commitDuration" className="text-neutral-400 text-xs font-medium uppercase tracking-wider">Commit</Label>
+              <span className="text-[10px] text-neutral-600 font-mono tracking-wider">BLOCKS</span>
             </div>
             <Input
               id="commitDuration"
@@ -277,18 +296,18 @@ export function CreateAuctionForm({ onSuccess }) {
               onChange={(e) => setCommitDuration(e.target.value)}
               disabled={isCreating}
               required
-              className="h-12 bg-black/50 border-neutral-800 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/50 rounded-xl px-4 font-mono text-lg"
+              className="h-10 bg-black/40 border-neutral-800/80 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/40 focus-visible:border-emerald-500/40 rounded-lg px-3.5 font-mono text-sm transition-colors"
             />
-            <p className="text-[11px] text-emerald-500/70 ml-1 font-medium">
+            <p className="text-[11px] text-emerald-500/60 ml-1 font-medium">
               ≈ {formatBlockDuration(parseInt(commitDuration) || 0)}
             </p>
           </div>
 
           {/* Reveal Duration */}
-          <div className="space-y-3">
-             <div className="flex justify-between items-baseline ml-1">
-              <Label htmlFor="revealDuration" className="text-neutral-300">Reveal Phase</Label>
-              <span className="text-xs text-neutral-500 font-mono">BLOCKS</span>
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-baseline ml-1">
+              <Label htmlFor="revealDuration" className="text-neutral-400 text-xs font-medium uppercase tracking-wider">Reveal</Label>
+              <span className="text-[10px] text-neutral-600 font-mono tracking-wider">BLOCKS</span>
             </div>
             <Input
               id="revealDuration"
@@ -299,34 +318,35 @@ export function CreateAuctionForm({ onSuccess }) {
               onChange={(e) => setRevealDuration(e.target.value)}
               disabled={isCreating}
               required
-              className="h-12 bg-black/50 border-neutral-800 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/50 rounded-xl px-4 font-mono text-lg"
+              className="h-10 bg-black/40 border-neutral-800/80 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/40 focus-visible:border-emerald-500/40 rounded-lg px-3.5 font-mono text-sm transition-colors"
             />
-            <p className="text-[11px] text-emerald-500/70 ml-1 font-medium">
+            <p className="text-[11px] text-emerald-500/60 ml-1 font-medium">
               ≈ {formatBlockDuration(parseInt(revealDuration) || 0)}
             </p>
           </div>
         </div>
+      </div>
 
-        <div className="pt-6">
-          <Button
-            type="submit"
-            disabled={isCreating || !address}
-            className="w-full h-14 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-lg rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] transition-all duration-300 mt-2"
-          >
-            {isCreating ? (
-              <>
-                <Loader2 className="mr-3 h-5 w-5 animate-spin" />
-                Initializing Contract...
-              </>
-            ) : !address ? (
-              "Connect per-wallet"
-            ) : (
-              "Launch Auction"
-            )}
-          </Button>
-        </div>
-      </form>
-    </div>
+      {/* Submit button */}
+      <div className="pt-1">
+        <Button
+          type="submit"
+          disabled={isCreating || !address}
+          className="w-full h-11 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm rounded-lg shadow-[0_0_20px_rgba(16,185,129,0.15)] hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] transition-all duration-300"
+        >
+          {isCreating ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Initializing Contract...
+            </>
+          ) : !address ? (
+            "Connect Wallet to Continue"
+          ) : (
+            "Launch Auction"
+          )}
+        </Button>
+      </div>
+    </form>
   );
 }
 

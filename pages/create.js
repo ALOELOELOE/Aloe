@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import { AppHeader } from "@/components/AppHeader";
 import { CreateAuctionForm } from "@/components/CreateAuctionForm";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock, Eye, Trophy } from "lucide-react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,6 +19,28 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+// Auction lifecycle steps shown in the sidebar
+const LIFECYCLE_STEPS = [
+  {
+    num: "1",
+    icon: Lock,
+    title: "Commit",
+    desc: "Bidders submit cryptographic commitments. Amounts stay hidden.",
+  },
+  {
+    num: "2",
+    icon: Eye,
+    title: "Reveal",
+    desc: "Bidders reveal original bids. ZK proofs verify authenticity.",
+  },
+  {
+    num: "3",
+    icon: Trophy,
+    title: "Settle",
+    desc: "Highest bid wins. Losers reclaim deposits. Winner pays exact bid.",
+  },
+];
 
 export default function CreateAuction() {
   const router = useRouter();
@@ -33,7 +55,7 @@ export default function CreateAuction() {
 
   return (
     <div
-      className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-black font-sans relative overflow-hidden`}
+      className={`${geistSans.variable} ${geistMono.variable} h-screen bg-black font-sans relative overflow-hidden`}
     >
       {/* Dynamic Background */}
       <div className="pointer-events-none absolute inset-0 z-0">
@@ -43,161 +65,112 @@ export default function CreateAuction() {
         <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:24px_24px]" />
       </div>
 
-      <div className="relative z-10 flex flex-col min-h-screen">
+      {/* Full-height flex layout */}
+      <div className="relative z-10 flex flex-col h-screen">
         {/* Shared App Header */}
         <AppHeader />
 
-        {/* Main Content */}
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-8 sm:px-6 sm:py-16">
-          {/* Back Link */}
+        {/* Main Content — centered vertically in remaining space */}
+        <main className="flex-1 min-h-0 w-full max-w-6xl mx-auto px-4 sm:px-6 flex flex-col justify-center py-4">
+          {/* Page Header */}
           <motion.div
-            className="mb-10 sm:mb-12"
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-3 mb-4"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
             <Link href="/dashboard">
-              <Button variant="ghost" className="gap-2 text-neutral-400 hover:text-white hover:bg-white/5 transition-colors">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-neutral-500 hover:text-white hover:bg-white/5 rounded-lg">
                 <ArrowLeft className="h-4 w-4" />
-                Back to Dashboard
               </Button>
             </Link>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-white leading-none">Create New Auction</h1>
+              <p className="text-xs text-neutral-500 mt-1">Sealed-bid auction with cryptographic privacy on Aleo</p>
+            </div>
           </motion.div>
 
-          {/* Page Title */}
+          {/* Unified content panel — auto height, not stretched */}
           <motion.div
-            className="mb-12 sm:mb-16"
-            initial={{ opacity: 0, y: 20 }}
+            className="rounded-2xl border border-neutral-800/60 bg-neutral-950/60 backdrop-blur-xl overflow-hidden"
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
           >
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white mb-4">Create New Auction</h1>
-            <p className="text-lg text-neutral-400 max-w-2xl">
-              Set up a sealed-bid auction with cryptographic privacy on Aleo.
-            </p>
-          </motion.div>
+            <div className="flex flex-col lg:flex-row">
+              {/* Left — Form */}
+              <div className="flex-1 p-5 sm:p-6">
+                <CreateAuctionForm onSuccess={handleSuccess} />
+              </div>
 
-          {/* Form and Info Grid */}
-          <div className="grid gap-12 lg:gap-16 lg:grid-cols-[1fr_400px]">
-            {/* Form Area */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 }}
-            >
-              <CreateAuctionForm onSuccess={handleSuccess} />
-            </motion.div>
-
-            {/* Info Sidebar Area */}
-            <div className="space-y-8">
-              {/* How Commit-Reveal Works - Glassmorphism */}
-              <motion.div
-                className="rounded-3xl border border-neutral-800/60 bg-black/40 backdrop-blur-xl p-8 transition-colors hover:border-emerald-500/30"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.3 }}
-              >
-                <h3 className="mb-6 text-xl font-semibold text-white tracking-tight">How Sealed Bids Work</h3>
-                <div className="space-y-6 text-sm text-neutral-400">
-                  <div className="flex gap-4">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-sm font-bold text-emerald-500 ring-1 ring-emerald-500/20">
-                      1
-                    </div>
-                    <div>
-                      <p className="font-medium text-white mb-1">Commit Phase</p>
-                      <p className="leading-relaxed">
-                        Bidders submit cryptographic commitments of their bids.
-                        The actual bid amounts are completely hidden.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-sm font-bold text-emerald-500 ring-1 ring-emerald-500/20">
-                      2
-                    </div>
-                    <div>
-                      <p className="font-medium text-white mb-1">Reveal Phase</p>
-                      <p className="leading-relaxed">
-                        After the commit deadline passes, bidders reveal their original bids.
-                        ZK proofs mathematically verify their authenticity.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-sm font-bold text-emerald-500 ring-1 ring-emerald-500/20">
-                      3
-                    </div>
-                    <div>
-                      <p className="font-medium text-white mb-1">Settlement</p>
-                      <p className="leading-relaxed">
-                        The highest valid bid wins. Losers get their deposits back. The winner
-                        pays their exact bid amount.
-                      </p>
-                    </div>
-                  </div>
+              {/* Right — Info sidebar (hidden below lg) */}
+              <div className="hidden lg:block w-[320px] shrink-0 border-l border-neutral-800/40 bg-black/20 p-5">
+                {/* How it works */}
+                <h3 className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest mb-3">How it works</h3>
+                <div className="space-y-3">
+                  {LIFECYCLE_STEPS.map((step, i) => (
+                    <motion.div
+                      key={step.num}
+                      className="flex gap-2.5"
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: 0.2 + i * 0.1 }}
+                    >
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 ring-1 ring-emerald-500/20">
+                        <step.icon className="h-3 w-3 text-emerald-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-white leading-none mb-0.5">{step.title}</p>
+                        <p className="text-[11px] text-neutral-500 leading-snug">{step.desc}</p>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
-              </motion.div>
 
-              {/* Tips - Glassmorphism */}
-              <motion.div
-                className="rounded-3xl border border-neutral-800/60 bg-black/40 backdrop-blur-xl p-8 transition-colors hover:border-emerald-500/30"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.4 }}
-              >
-                <h3 className="mb-6 text-xl font-semibold text-white tracking-tight">Tips for Auctioneers</h3>
-                <ul className="space-y-4 text-sm text-neutral-400 leading-relaxed">
-                  <li className="flex items-start gap-3">
-                    <span className="text-emerald-500 mt-1">•</span>
-                    <span>
-                      Set the commit duration long enough for bidders to discover and
-                      participate (~1 hour minimum timeframe).
-                    </span>
+                {/* Divider */}
+                <div className="h-px bg-neutral-800/40 my-4" />
+
+                {/* Tips */}
+                <h3 className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest mb-2.5">Quick tips</h3>
+                <ul className="space-y-1.5 text-[11px] text-neutral-500 leading-snug">
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 mt-px shrink-0">&#8226;</span>
+                    <span>Commit: ~1 hr minimum for bidder discovery</span>
                   </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-emerald-500 mt-1">•</span>
-                    <span>
-                      The reveal duration should give bidders comfortable time to come back and reveal, but not
-                      so long that settlement stalls (~30 mins is healthy).
-                    </span>
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 mt-px shrink-0">&#8226;</span>
+                    <span>Reveal: ~30 min is healthy for settlement</span>
                   </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-emerald-500 mt-1">•</span>
-                    <span>
-                      The minimum bid should comfortably cover your gas costs and effectively act as your reserve
-                      price.
-                    </span>
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 mt-px shrink-0">&#8226;</span>
+                    <span>Min bid covers gas and acts as reserve price</span>
                   </li>
-                  <li className="flex items-start gap-3">
-                    <span className="text-emerald-500 mt-1">•</span>
-                    <span>
-                      Aleo testnet averages ≈ 10 seconds per block. Therefore, 360 blocks roughly equals 1 hour of real time.
-                    </span>
+                  <li className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 mt-px shrink-0">&#8226;</span>
+                    <span>~10s/block, so 360 blocks ≈ 1 hour</span>
                   </li>
                 </ul>
-              </motion.div>
+              </div>
             </div>
-          </div>
+          </motion.div>
         </main>
-      </div>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-neutral-800/50 bg-black/40 backdrop-blur-md py-8">
-        <div className="mx-auto max-w-7xl px-4 text-center text-sm text-neutral-500">
-          <p>
+        {/* Footer — pinned at bottom */}
+        <footer className="shrink-0 border-t border-neutral-800/50 bg-black/40 backdrop-blur-md py-2">
+          <div className="mx-auto max-w-6xl px-4 text-center text-xs text-neutral-600">
             Built on{" "}
             <a
               href="https://aleo.org"
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium text-emerald-500 hover:text-emerald-400 transition-colors"
+              className="font-medium text-emerald-600 hover:text-emerald-400 transition-colors"
             >
               Aleo
             </a>{" "}
-            - Privacy purely by default
-          </p>
-        </div>
-      </footer>
+            — Privacy by default
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }

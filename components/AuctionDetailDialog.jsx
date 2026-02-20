@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Gavel, XCircle } from "lucide-react";
+import { Loader2, Gavel, XCircle, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import {
   buildPlaceBidInputs,
@@ -273,10 +273,7 @@ export function AuctionDetailDialog({
                 <span className="text-muted-foreground">Current Bids:</span>
                 <span className="font-medium">{auction.bidCount || 0}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Auction ID:</span>
-                <span className="font-mono text-xs">{auction.id?.toString().slice(0, 12)}...</span>
-              </div>
+              <AuctionIdRow auctionId={auction.id} />
 
               {/* Timer */}
               <AuctionTimer
@@ -406,6 +403,40 @@ export function AuctionDetailDialog({
         auction={auction}
       />
     </>
+  );
+}
+
+/**
+ * Inline component for the Auction ID row with copy-to-clipboard
+ */
+function AuctionIdRow({ auctionId }) {
+  const [copied, setCopied] = useState(false);
+  const idStr = auctionId?.toString() || "";
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(idStr);
+    toast.success("Auction ID copied!");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-muted-foreground">Auction ID:</span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="flex items-center gap-1.5 font-mono text-xs hover:text-emerald-400 transition-colors cursor-pointer group"
+        title="Click to copy full ID"
+      >
+        <span>{idStr.slice(0, 12)}...</span>
+        {copied ? (
+          <Check className="h-3 w-3 text-emerald-400" />
+        ) : (
+          <Copy className="h-3 w-3 text-muted-foreground group-hover:text-emerald-400 transition-colors" />
+        )}
+      </button>
+    </div>
   );
 }
 

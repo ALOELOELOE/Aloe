@@ -218,12 +218,47 @@ After completing Wave 2, several UX issues were identified and fixed:
 
 ---
 
+## Cross-Browser Auction Discovery (February 20, 2026)
+
+### Problem
+
+Auctions are stored in localStorage (Zustand persist) — they don't sync across browsers. The Aleo blockchain has on-chain auction data in the `auctions` mapping, but mappings are key-value lookups only: you can fetch `auctions[123field]` if you know the key, but you can't enumerate all keys. This means when User A creates an auction on Browser A, User B on Browser B can't see it.
+
+### Solution: Import by Auction ID
+
+Added an import flow that lets users paste an auction ID to fetch its data from chain and add it to their local store. No backend indexer needed.
+
+| Component | What It Does |
+|-----------|-------------|
+| `fetchAuctionOnChain` (enhanced) | Now parses all struct fields: `auctioneer`, `item_id`, `min_bid`, plus existing `commitDeadline`, `revealDeadline`, `status`, `winner`, `winningBid` |
+| `fetchBidCount` (new) | Reads `bid_count` mapping for an auction |
+| `ImportAuctionDialog` (new) | Dialog to enter auction ID, validates, fetches on-chain data, adds to store |
+| Dashboard import button | "Import" button next to "New Auction" in Live Auctions header |
+| URL param import | `?import=<auctionId>` auto-opens the import dialog (shareable links) |
+| Copyable auction ID | After creation, shows the auction ID with a copy button so creators can share it |
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `lib/aleo.js` | Enhanced `fetchAuctionOnChain` to parse `auctioneer`, `item_id`, `min_bid`; added `fetchBidCount` |
+| `components/ImportAuctionDialog.jsx` | New dialog for importing auctions by ID |
+| `pages/dashboard.js` | Import button, `ImportAuctionDialog` integration, `?import=` URL param handling |
+| `components/CreateAuctionForm.jsx` | Copyable auction ID banner after successful creation |
+
+### Why Not Auto-Sync?
+
+Aleo mappings don't support enumeration — there's no `getAllKeys()`. A proper solution would be an indexer service that watches program transactions and builds a searchable auction list. The import-by-ID approach is the simplest solution without introducing backend infrastructure.
+
+---
+
 ## Known Limitations / Future Work
 
 1. **Deposit leaks bid amount** — `deposit` is public and currently set equal to `bid_amount`. Observers can infer bids from deposit sizes. Fix: add deposit obfuscation (round up to tiers or use a fixed deposit).
 2. **Last-second bids are risky** — Contract checks `block.height` at finalization, not submission. A bid placed in the last ~20 seconds may be rejected if it finalizes after the deadline.
 3. **Single-browser dependency** — Bid data (salt, amount) is stored in localStorage. Users must reveal from the same browser where they bid. No cross-device recovery.
 4. **No multi-bidder testing** — On-chain testing was single-bidder (self-bidding). Multi-wallet refund flow not yet tested on testnet.
+5. **No auction enumeration** — Aleo mappings are key-value only. Cross-browser discovery requires manual ID sharing until an indexer is built.
 
 ---
 
