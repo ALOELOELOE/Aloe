@@ -8,9 +8,9 @@
 // GSAP ScrollTrigger handles scroll-triggered stagger entrance.
 // Background uses pure black to match the rest of the landing page.
 
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { motion, useInView } from "motion/react";
-import { ShieldCheck, EyeOff, Scale, Lock } from "lucide-react";
+import { ShieldCheck, EyeOff, Scale, Lock, ArrowRightLeft, Fingerprint, CircleCheck } from "lucide-react";
 
 // ── Visual demonstration sub-components ──────────────────────────
 // These show the privacy concept visually rather than just describing it.
@@ -32,26 +32,19 @@ function BidBoardVisual() {
           initial="initial"
           animate="animate"
           variants={{
-            initial: { opacity: 0.5, borderColor: "rgba(38,38,38,0.5)", x: 0 },
+            initial: { opacity: 0, x: -15 },
             animate: (i) => ({
-              opacity: [0.5, 1, 1, 0.5, 0.5],
-              borderColor: [
-                "rgba(38,38,38,0.5)",
-                "rgba(16,185,129,0.5)",
-                "rgba(16,185,129,0.5)",
-                "rgba(38,38,38,0.5)",
-                "rgba(38,38,38,0.5)"
-              ],
-              x: [0, 4, 4, 0, 0],
+              opacity: [0, 0, 1, 1, 0],
+              x: [-15, -15, 0, 0, -15],
               transition: {
                 repeat: Infinity,
-                duration: 3,
-                delay: i * 1,
-                times: [0, 0.05, 0.28, 0.33, 1]
+                duration: 4,
+                times: [0, i * 0.28, i * 0.28 + 0.1, 0.9, 1],
+                ease: "easeInOut"
               }
             })
           }}
-          className="flex items-center justify-between rounded-lg bg-black/60 px-3 py-2 border"
+          className="flex items-center justify-between rounded-lg bg-black/60 px-3 py-2 border border-neutral-800/50"
         >
           <span className="text-neutral-500">{bid.bidder}</span>
           <span className="text-emerald-400/60">{bid.hash}</span>
@@ -65,6 +58,56 @@ function BidBoardVisual() {
   );
 }
 
+// Helper component for the scrambling encryption text effect
+function ScramblingText({ delay }) {
+  const [text, setText] = useState("●●●●●●●●●●");
+
+  useEffect(() => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+    let intervalId;
+    let timeoutId;
+
+    const runScramble = () => {
+      let iteration = 0;
+      clearInterval(intervalId);
+
+      intervalId = setInterval(() => {
+        setText(
+          "●●●●●●●●●●"
+            .split("")
+            .map((char, index) => {
+              if (index < iteration / 2) {
+                return "●";
+              }
+              return chars[Math.floor(Math.random() * chars.length)];
+            })
+            .join("")
+        );
+
+        if (iteration >= 20) {
+          clearInterval(intervalId);
+          setText("●●●●●●●●●●");
+        }
+        iteration += 1;
+      }, 30);
+    };
+
+    // Initial delay
+    timeoutId = setTimeout(() => {
+      runScramble();
+      // Then loop every 4 seconds
+      setInterval(runScramble, 4000);
+    }, delay * 1000);
+
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(timeoutId);
+    };
+  }, [delay]);
+
+  return <span className="text-emerald-400/80 tracking-widest">{text}</span>;
+}
+
 // Masked data fields — shows all auction data is hidden
 function DataFieldsVisual() {
   const fields = ["Identity", "Bid Amount", "Strategy"];
@@ -72,37 +115,14 @@ function DataFieldsVisual() {
   return (
     <div className="space-y-1.5 font-mono text-xs">
       {fields.map((field, i) => (
-        <motion.div
+        <div
           key={field}
-          custom={i}
-          initial="initial"
-          animate="animate"
-          variants={{
-            initial: { opacity: 0.4, filter: "blur(2px)", borderColor: "rgba(38,38,38,0.5)" },
-            animate: (i) => ({
-              opacity: [0.4, 1, 1, 0.4, 0.4],
-              filter: ["blur(2px)", "blur(0px)", "blur(0px)", "blur(2px)", "blur(2px)"],
-              borderColor: [
-                "rgba(38,38,38,0.5)",
-                "rgba(16,185,129,0.5)",
-                "rgba(16,185,129,0.5)",
-                "rgba(38,38,38,0.5)",
-                "rgba(38,38,38,0.5)"
-              ],
-              transition: {
-                repeat: Infinity,
-                duration: 3,
-                delay: i * 1,
-                times: [0, 0.05, 0.28, 0.33, 1]
-              }
-            })
-          }}
-          className="flex items-center justify-between rounded-lg bg-black/60 px-3 py-2 border"
+          className="flex items-center justify-between rounded-lg bg-black/60 px-3 py-2 border border-neutral-800/50"
         >
           <span className="text-neutral-500 w-20">{field}</span>
-          <span className="text-neutral-700 tracking-tight">●●●●●●●●●●</span>
+          <ScramblingText delay={i * 0.4} />
           <Lock className="h-3 w-3 text-emerald-500/40 shrink-0" />
-        </motion.div>
+        </div>
       ))}
     </div>
   );
@@ -111,13 +131,13 @@ function DataFieldsVisual() {
 // Verification flow — shows Tx → ZK Proof → Verified chain
 function VerifyFlowVisual() {
   const steps = [
-    { label: "Transaction", short: "Tx", active: false },
-    { label: "ZK Proof", short: "ZK", active: true },
-    { label: "Verified", short: "✓", active: true },
+    { label: "Transaction", icon: ArrowRightLeft },
+    { label: "ZK Proof", icon: Fingerprint },
+    { label: "Verified", icon: CircleCheck },
   ];
 
   return (
-    <div className="flex items-center justify-between gap-1.5 font-mono text-xs py-1">
+    <div className="flex items-center justify-between gap-1.5 font-mono text-xs h-[114px]">
       {steps.map((step, i) => (
         <div key={step.label} className="flex items-center flex-1 min-w-0">
           {/* Step circle */}
@@ -179,7 +199,7 @@ function VerifyFlowVisual() {
               }}
               className="flex h-10 w-10 items-center justify-center rounded-full border text-sm font-medium mb-1.5"
             >
-              {step.short}
+              <step.icon className="h-4.5 w-4.5" />
             </motion.div>
             <span
               className={`text-[10px] text-neutral-500`}

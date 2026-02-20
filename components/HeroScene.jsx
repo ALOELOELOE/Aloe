@@ -42,12 +42,13 @@ function MainCrystal({ position = [0, 0, 0], scale = 1 }) {
   return (
     <Float speed={1} rotationIntensity={0.2} floatIntensity={0.3}>
       <group position={position} scale={scale}>
-        {/* Outer crystal */}
+        {/* Outer crystal — detail=2 gives 128 faces for smooth gem look */}
         <mesh ref={meshRef}>
-          <octahedronGeometry args={[1.5, 0]} />
+          <octahedronGeometry args={[1.5, 2]} />
           <MeshTransmissionMaterial
             backside
             samples={8}
+            resolution={1024}
             thickness={0.5}
             chromaticAberration={0.1}
             anisotropy={0.3}
@@ -64,9 +65,9 @@ function MainCrystal({ position = [0, 0, 0], scale = 1 }) {
             envMapIntensity={1}
           />
         </mesh>
-        {/* Inner glowing core */}
+        {/* Inner glowing core — detail=2 matches outer crystal smoothness */}
         <mesh ref={innerRef} scale={0.4}>
-          <octahedronGeometry args={[1, 0]} />
+          <octahedronGeometry args={[1, 2]} />
           <meshBasicMaterial color="#34d399" transparent opacity={0.8} />
         </mesh>
       </group>
@@ -93,10 +94,11 @@ function RingCrystal({ radius, angleRef, offset = 0, color = "#6ee7b7", scale = 
 
   return (
     <mesh ref={meshRef} position={[Math.cos(offset) * radius, 0, Math.sin(offset) * radius]} scale={scale}>
-      <octahedronGeometry args={[1, 0]} />
+      <octahedronGeometry args={[1, 2]} />
       <MeshTransmissionMaterial
         backside
-        samples={6}
+        samples={4}
+        resolution={512}
         thickness={0.4}
         chromaticAberration={0.15}
         anisotropy={0.2}
@@ -131,10 +133,11 @@ function RingSphere({ radius, angleRef, offset = 0, color = "#67e8f9", scale = 0
 
   return (
     <mesh ref={meshRef} position={[Math.cos(offset) * radius, 0, Math.sin(offset) * radius]} scale={scale}>
-      <sphereGeometry args={[1, 32, 32]} />
+      <sphereGeometry args={[1, 16, 16]} />
       <MeshTransmissionMaterial
         backside
-        samples={6}
+        samples={4}
+        resolution={512}
         thickness={0.3}
         chromaticAberration={0.05}
         anisotropy={0.1}
@@ -366,12 +369,13 @@ export function HeroScene({ onLoaded }) {
       <Canvas
         frameloop="demand"
         camera={{ position: [0, 0, 8], fov: 45 }}
-        dpr={[1, 1.5]}
+        dpr={[1, 2]}
         gl={{
           antialias: true,
           alpha: true,
           powerPreference: "high-performance",
           stencil: false,
+          toneMappingExposure: 1.1,
         }}
         style={{ background: "transparent" }}
       >
