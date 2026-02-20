@@ -209,57 +209,65 @@ export function CreateAuctionForm({ onSuccess }) {
   };
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Plus className="h-5 w-5" />
+    <div className="w-full max-w-xl mx-auto p-8 sm:p-10 bg-black/40 backdrop-blur-xl border border-neutral-800/60 rounded-[2rem] shadow-2xl">
+      <div className="mb-8">
+        <h2 className="flex items-center gap-3 text-2xl font-bold text-white tracking-tight">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 ring-1 ring-emerald-500/20">
+            <Plus className="h-5 w-5" />
+          </div>
           Create Auction
-        </CardTitle>
-        <CardDescription>
-          Create a new sealed-bid auction. Bidders will submit encrypted bids
+        </h2>
+        <p className="mt-3 text-sm text-neutral-400 leading-relaxed">
+          Launch a new sealed-bid auction. Bidders will submit encrypted bids
           that are revealed after the commit phase ends.
-        </CardDescription>
-      </CardHeader>
+        </p>
+      </div>
 
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          {/* Item Name */}
-          <div className="space-y-2">
-            <Label htmlFor="itemName">Item Name</Label>
-            <Input
-              id="itemName"
-              placeholder="Enter item name or description"
-              value={itemName}
-              onChange={(e) => setItemName(e.target.value)}
-              disabled={isCreating}
-              required
-            />
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Item Name */}
+        <div className="space-y-3">
+          <Label htmlFor="itemName" className="text-neutral-300 ml-1">Item Name</Label>
+          <Input
+            id="itemName"
+            placeholder="e.g., Vintage Rolex Submariner"
+            value={itemName}
+            onChange={(e) => setItemName(e.target.value)}
+            disabled={isCreating}
+            required
+            className="h-12 bg-black/50 border-neutral-800 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/50 rounded-xl px-4"
+          />
+        </div>
+
+        {/* Minimum Bid */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-baseline ml-1">
+            <Label htmlFor="minBid" className="text-neutral-300">Minimum Bid</Label>
+            <span className="text-xs text-neutral-500 font-mono">CREDITS</span>
           </div>
+          <Input
+            id="minBid"
+            type="number"
+            step="0.000001"
+            min="0.000001"
+            placeholder="0.001"
+            value={minBid}
+            onChange={(e) => setMinBid(e.target.value)}
+            disabled={isCreating}
+            required
+            className="h-12 bg-black/50 border-neutral-800 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/50 rounded-xl px-4 font-mono text-lg"
+          />
+          <p className="text-xs text-neutral-500 ml-1">
+            Minimum required starting floor
+          </p>
+        </div>
 
-          {/* Minimum Bid */}
-          <div className="space-y-2">
-            <Label htmlFor="minBid">Minimum Bid (credits)</Label>
-            <Input
-              id="minBid"
-              type="number"
-              step="0.000001"
-              min="0.000001"
-              placeholder="0.001"
-              value={minBid}
-              onChange={(e) => setMinBid(e.target.value)}
-              disabled={isCreating}
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              Minimum amount bidders must bid
-            </p>
-          </div>
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
           {/* Commit Duration */}
-          <div className="space-y-2">
-            <Label htmlFor="commitDuration">
-              Commit Phase Duration (blocks)
-            </Label>
+          <div className="space-y-3">
+            <div className="flex justify-between items-baseline ml-1">
+              <Label htmlFor="commitDuration" className="text-neutral-300">Commit Phase</Label>
+              <span className="text-xs text-neutral-500 font-mono">BLOCKS</span>
+            </div>
             <Input
               id="commitDuration"
               type="number"
@@ -269,18 +277,19 @@ export function CreateAuctionForm({ onSuccess }) {
               onChange={(e) => setCommitDuration(e.target.value)}
               disabled={isCreating}
               required
+              className="h-12 bg-black/50 border-neutral-800 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/50 rounded-xl px-4 font-mono text-lg"
             />
-            <p className="text-xs text-muted-foreground">
-              {formatBlockDuration(parseInt(commitDuration) || 0)} - Time for
-              bidders to submit sealed bids
+            <p className="text-[11px] text-emerald-500/70 ml-1 font-medium">
+              ≈ {formatBlockDuration(parseInt(commitDuration) || 0)}
             </p>
           </div>
 
           {/* Reveal Duration */}
-          <div className="space-y-2">
-            <Label htmlFor="revealDuration">
-              Reveal Phase Duration (blocks)
-            </Label>
+          <div className="space-y-3">
+             <div className="flex justify-between items-baseline ml-1">
+              <Label htmlFor="revealDuration" className="text-neutral-300">Reveal Phase</Label>
+              <span className="text-xs text-neutral-500 font-mono">BLOCKS</span>
+            </div>
             <Input
               id="revealDuration"
               type="number"
@@ -290,34 +299,34 @@ export function CreateAuctionForm({ onSuccess }) {
               onChange={(e) => setRevealDuration(e.target.value)}
               disabled={isCreating}
               required
+              className="h-12 bg-black/50 border-neutral-800 text-white placeholder:text-neutral-600 focus-visible:ring-emerald-500/50 rounded-xl px-4 font-mono text-lg"
             />
-            <p className="text-xs text-muted-foreground">
-              {formatBlockDuration(parseInt(revealDuration) || 0)} - Time for
-              bidders to reveal their bids
+            <p className="text-[11px] text-emerald-500/70 ml-1 font-medium">
+              ≈ {formatBlockDuration(parseInt(revealDuration) || 0)}
             </p>
           </div>
-        </CardContent>
+        </div>
 
-        <CardFooter>
+        <div className="pt-6">
           <Button
             type="submit"
-            className="w-full"
             disabled={isCreating || !address}
+            className="w-full h-14 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-lg rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] transition-all duration-300 mt-2"
           >
             {isCreating ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating Auction...
+                <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+                Initializing Contract...
               </>
             ) : !address ? (
-              "Connect Wallet to Create"
+              "Connect per-wallet"
             ) : (
-              "Create Auction"
+              "Launch Auction"
             )}
           </Button>
-        </CardFooter>
+        </div>
       </form>
-    </Card>
+    </div>
   );
 }
 
